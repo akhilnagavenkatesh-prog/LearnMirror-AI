@@ -1,0 +1,941 @@
+/* ========================================
+   LEARNMIRROR AI - CINEMATIC FOREST THEME
+======================================== */
+
+
+/* =========================
+   GLOBAL
+========================= */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+
+body {
+    font-family: Arial, sans-serif;
+
+    background:
+        radial-gradient(
+            circle at 85% 15%,
+            rgba(212, 166, 74, 0.18),
+            transparent 28%
+        ),
+        radial-gradient(
+            circle at 10% 80%,
+            rgba(30, 100, 65, 0.28),
+            transparent 32%
+        ),
+        linear-gradient(
+            135deg,
+            #07110d,
+            #10231a,
+            #0b1712
+        );
+
+    color: #f5f1e6;
+    min-height: 100vh;
+}
+
+
+/* =========================
+   HEADER
+========================= */
+
+header {
+    text-align: center;
+    padding: 38px 20px;
+
+    background: linear-gradient(
+        90deg,
+        #07110d,
+        #183326,
+        #4b3b1b
+    );
+
+    border-bottom: 2px solid rgba(212, 166, 74, 0.45);
+
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65);
+}
+
+
+.logo {
+    font-size: 42px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: #f5f1e6;
+}
+
+
+.logo span {
+    color: #f3c969;
+}
+
+
+header p {
+    margin-top: 10px;
+    font-size: 18px;
+    color: #d8d1c0;
+}
+
+
+/* =========================
+   MAIN
+========================= */
+
+main {
+    width: 70%;
+    max-width: 1100px;
+    margin: 40px auto;
+}
+
+
+/* =========================
+   CARDS
+========================= */
+
+.card {
+    background: linear-gradient(
+        135deg,
+        rgba(18, 38, 28, 0.98),
+        rgba(29, 58, 41, 0.98)
+    );
+
+    margin-bottom: 28px;
+    padding: 30px;
+
+    border-radius: 20px;
+
+    border: 1px solid rgba(212, 166, 74, 0.25);
+
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.55);
+
+    transition: all 0.3s ease;
+}
+
+
+.card:hover {
+    transform: translateY(-4px);
+
+    border-color: rgba(212, 166, 74, 0.55);
+
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+}
+
+
+/* =========================
+   HEADINGS
+========================= */
+
+h2 {
+    font-size: 28px;
+    margin-bottom: 25px;
+    color: #f3d27a;
+}
+
+
+.section-title {
+    color: #d4a64a;
+    margin-top: 25px;
+    margin-bottom: 10px;
+}
+
+
+.small-text {
+    color: #cfc8b8;
+    margin-bottom: 15px;
+}
+
+
+/* =========================
+   LABELS
+========================= */
+
+.input-label {
+    display: block;
+    margin-top: 15px;
+    margin-bottom: 8px;
+
+    color: #f3d27a;
+    font-weight: bold;
+}
+
+
+/* =========================
+   INPUTS
+========================= */
+
+input,
+textarea {
+    width: 100%;
+
+    padding: 15px;
+    margin-bottom: 15px;
+
+    border-radius: 12px;
+
+    border: 2px solid rgba(212, 166, 74, 0.25);
+
+    font-size: 16px;
+
+    background: #f5f1e6;
+    color: #1b241d;
+
+    outline: none;
+
+    transition: 0.3s;
+}
+
+
+input:focus,
+textarea:focus {
+    border-color: #f3c969;
+
+    box-shadow:
+        0 0 8px rgba(243, 201, 105, 0.5),
+        0 0 18px rgba(212, 166, 74, 0.35);
+}
+
+
+textarea {
+    min-height: 180px;
+    resize: vertical;
+}
+
+
+/* =========================
+   OR TEXT
+========================= */
+
+.or-text {
+    text-align: center;
+    font-weight: bold;
+
+    color: #f3d27a;
+
+    margin: 18px;
+}
+
+
+/* =========================
+   UPLOAD BOX
+========================= */
+
+.upload-box {
+    display: block;
+
+    text-align: center;
+
+    padding: 28px;
+
+    border-radius: 15px;
+
+    border: 2px dashed #d4a64a;
+
+    background: linear-gradient(
+        135deg,
+        rgba(40, 75, 52, 0.85),
+        rgba(90, 65, 25, 0.28)
+    );
+
+    cursor: pointer;
+
+    transition: 0.3s;
+
+    color: #f3d27a;
+}
+
+
+.upload-box:hover {
+    transform: scale(1.015);
+
+    background: linear-gradient(
+        135deg,
+        rgba(55, 95, 65, 0.95),
+        rgba(120, 85, 30, 0.4)
+    );
+
+    box-shadow:
+        0 0 20px rgba(212, 166, 74, 0.25);
+}
+
+
+.upload-box input {
+    display: none;
+}
+
+
+#fileName {
+    display: block;
+
+    margin-top: 10px;
+
+    color: #d8d1c0;
+}
+
+
+/* ========================================
+   ⚡ THOR ELECTRIC BUTTON EFFECT
+======================================== */
+
+button {
+    width: 100%;
+
+    padding: 16px;
+
+    border: none;
+
+    border-radius: 12px;
+
+    font-size: 17px;
+    font-weight: bold;
+
+    cursor: pointer;
+
+    margin-top: 10px;
+
+    position: relative;
+
+    overflow: hidden;
+
+    transition:
+        transform 0.25s ease,
+        filter 0.25s ease,
+        box-shadow 0.25s ease;
+
+    box-shadow:
+        0 0 10px rgba(96, 165, 250, 0.4),
+        0 0 22px rgba(59, 130, 246, 0.3);
+}
+
+
+/* ⚡ LIGHTNING SHINE */
+
+button::before {
+    content: "";
+
+    position: absolute;
+
+    top: 0;
+    left: -130%;
+
+    width: 55%;
+    height: 100%;
+
+    background: linear-gradient(
+        120deg,
+        transparent,
+        rgba(255, 255, 255, 0.18),
+        rgba(120, 220, 255, 0.35),
+        rgba(255, 255, 255, 0.18),
+        transparent
+    );
+
+    transform: skewX(-25deg);
+
+    transition: left 0.6s ease;
+
+    pointer-events: none;
+}
+
+
+button:hover::before {
+    left: 150%;
+}
+
+
+button:hover {
+    transform: translateY(-4px) scale(1.02);
+
+    filter: brightness(1.18);
+
+    animation: thorGlow 0.35s infinite alternate;
+}
+
+
+@keyframes thorGlow {
+
+    0% {
+        box-shadow:
+            0 0 10px #ffffff,
+            0 0 22px #7dd3fc,
+            0 0 42px #38bdf8,
+            0 0 65px #2563eb;
+    }
+
+    100% {
+        box-shadow:
+            0 0 18px #ffffff,
+            0 0 38px #7dd3fc,
+            0 0 70px #38bdf8,
+            0 0 110px #1d4ed8;
+    }
+
+}
+
+
+button:active {
+    transform: scale(0.96);
+
+    filter: brightness(1.4);
+
+    box-shadow:
+        0 0 20px white,
+        0 0 50px #7dd3fc,
+        0 0 90px #38bdf8,
+        0 0 130px #2563eb;
+}
+
+
+/* =========================
+   GENERATE PLAN BUTTON
+========================= */
+
+.generate-btn {
+    background: linear-gradient(
+        90deg,
+        #7a1f2b,
+        #a93d3d,
+        #c46a3b
+    );
+
+    color: white;
+}
+
+
+/* =========================
+   VOICE BUTTONS
+========================= */
+
+.voice-buttons {
+    display: flex;
+    gap: 15px;
+    width: 100%;
+}
+
+
+.voice-buttons button {
+    flex: 1;
+    width: 100%;
+}
+
+
+/* =========================
+   START SPEAKING BUTTON
+========================= */
+
+.voice-btn {
+    background: linear-gradient(
+        90deg,
+        #6d28d9,
+        #9333ea,
+        #c026d3
+    );
+
+    color: white;
+
+    border: 1px solid rgba(216, 180, 254, 0.7);
+}
+
+
+/* =========================
+   STOP SPEAKING BUTTON
+========================= */
+
+.stop-btn {
+    background: linear-gradient(
+        90deg,
+        #c2410c,
+        #ea580c,
+        #f97316
+    );
+
+    color: white;
+
+    border: 1px solid rgba(253, 186, 116, 0.7);
+}
+
+
+/* =========================
+   EVALUATE BUTTON
+========================= */
+
+.evaluate-btn {
+    background: linear-gradient(
+        90deg,
+        #8a651f,
+        #d4a64a,
+        #f3c969
+    );
+
+    color: #211807;
+}
+
+
+/* =========================
+   PLAN SUMMARY
+========================= */
+
+.plan-summary-box {
+    background: linear-gradient(
+        135deg,
+        #1b3527,
+        #274b36
+    );
+
+    color: #f5f1e6;
+
+    padding: 25px;
+
+    border-radius: 18px;
+
+    margin-bottom: 20px;
+
+    border-left: 6px solid #f3c969;
+}
+
+
+.plan-summary-box p {
+    margin: 7px 0;
+}
+
+
+/* =========================
+   DAY CARDS
+========================= */
+
+.day-card {
+    background: linear-gradient(
+        135deg,
+        #14281e,
+        #203d2d
+    );
+
+    border-left: 6px solid #d4a64a;
+
+    padding: 22px;
+
+    margin-top: 18px;
+
+    border-radius: 15px;
+
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.35);
+
+    transition: 0.3s;
+}
+
+
+.day-card:hover {
+    transform: translateX(8px);
+
+    border-left-color: #7dd3fc;
+
+    box-shadow:
+        0 0 15px rgba(56, 189, 248, 0.25);
+}
+
+
+.day-card h3 {
+    color: #f3d27a;
+
+    font-size: 23px;
+
+    margin-bottom: 12px;
+}
+
+
+.day-card h4 {
+    color: #d4a64a;
+}
+
+
+.day-card li {
+    margin: 10px 0;
+
+    font-size: 16px;
+
+    color: #e0dbcf;
+}
+
+
+/* =========================
+   LEARN CONTENT
+========================= */
+
+#learnContent h3 {
+    color: #f3d27a;
+    margin-bottom: 15px;
+}
+
+
+#learnContent p {
+    color: #e0dbcf;
+    line-height: 1.7;
+}
+
+
+/* =========================
+   PROFESSIONAL REPORT CARD
+========================= */
+
+#report {
+
+    background: linear-gradient(
+        135deg,
+        #1b3527,
+        #284632
+    );
+
+    color: #f5f1e6;
+
+    padding: 28px;
+
+    border-radius: 18px;
+
+    border: 1px solid rgba(212, 166, 74, 0.35);
+
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.35);
+
+}
+
+
+.report-dashboard {
+    width: 100%;
+}
+
+
+.score-header {
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    margin-bottom: 18px;
+}
+
+
+.score-title {
+    font-size: 14px;
+
+    letter-spacing: 2px;
+
+    color: #d8d1c0;
+
+    font-weight: bold;
+}
+
+
+.main-score {
+    font-size: 48px;
+
+    font-weight: bold;
+
+    color: #f3c969;
+
+    margin-top: 8px;
+
+    text-shadow:
+        0 0 15px rgba(243, 201, 105, 0.25);
+}
+
+
+.main-progress {
+    width: 100%;
+
+    height: 12px;
+
+    background: #10231a;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+
+    margin-bottom: 30px;
+
+    border: 1px solid rgba(212, 166, 74, 0.2);
+}
+
+
+.main-progress-fill {
+    height: 100%;
+
+    border-radius: 20px;
+
+    background: linear-gradient(
+        90deg,
+        #8a651f,
+        #d4a64a,
+        #f3c969
+    );
+
+    transition: width 1s ease;
+
+    box-shadow:
+        0 0 15px rgba(243, 201, 105, 0.5);
+}
+
+
+.attribute-row {
+    display: grid;
+
+    grid-template-columns: 170px 1fr 65px;
+
+    align-items: center;
+
+    gap: 15px;
+
+    margin: 18px 0;
+}
+
+
+.attribute-name {
+    color: #f5f1e6;
+
+    font-weight: bold;
+
+    font-size: 16px;
+}
+
+
+.attribute-bar {
+    width: 100%;
+
+    height: 10px;
+
+    background: #10231a;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+
+.attribute-fill {
+    height: 100%;
+
+    border-radius: 20px;
+
+    transition: width 1s ease;
+}
+
+
+.concept-fill {
+    background: linear-gradient(
+        90deg,
+        #d4a64a,
+        #f3c969
+    );
+
+    box-shadow:
+        0 0 12px rgba(243, 201, 105, 0.45);
+}
+
+
+.recall-fill {
+    background: linear-gradient(
+        90deg,
+        #3f7a52,
+        #69a879
+    );
+
+    box-shadow:
+        0 0 12px rgba(105, 168, 121, 0.35);
+}
+
+
+.application-fill {
+    background: linear-gradient(
+        90deg,
+        #2d6a73,
+        #63a9b5
+    );
+
+    box-shadow:
+        0 0 12px rgba(99, 169, 181, 0.35);
+}
+
+
+.depth-fill {
+    background: linear-gradient(
+        90deg,
+        #7a4f8f,
+        #b084c3
+    );
+
+    box-shadow:
+        0 0 12px rgba(176, 132, 195, 0.35);
+}
+
+
+.attribute-score {
+    text-align: right;
+
+    font-size: 16px;
+
+    font-weight: bold;
+
+    color: #f3d27a;
+}
+
+
+.report-topic {
+    margin-top: 28px;
+
+    padding: 18px;
+
+    background: rgba(7, 17, 13, 0.45);
+
+    border-radius: 12px;
+
+    border-left: 4px solid #d4a64a;
+
+    color: #e0dbcf;
+
+    line-height: 1.8;
+}
+
+
+.report-feedback {
+    margin-top: 20px;
+
+    padding: 20px;
+
+    border-radius: 14px;
+
+    background: linear-gradient(
+        135deg,
+        rgba(40, 75, 52, 0.8),
+        rgba(90, 65, 25, 0.18)
+    );
+
+    border: 1px solid rgba(212, 166, 74, 0.25);
+
+    color: #f5f1e6;
+
+    line-height: 1.7;
+}
+
+
+/* =========================
+   VOICE STATUS
+========================= */
+
+#voiceStatus {
+    margin-top: 15px;
+
+    color: #d8b4fe;
+
+    font-weight: bold;
+}
+
+
+/* =========================
+   FOOTER
+========================= */
+
+footer {
+    text-align: center;
+
+    padding: 25px;
+
+    margin-top: 40px;
+
+    background: linear-gradient(
+        90deg,
+        #07110d,
+        #183326,
+        #2d2412
+    );
+
+    border-top:
+        1px solid rgba(212, 166, 74, 0.3);
+
+    color: #d8d1c0;
+}
+
+
+/* =========================
+   SCROLLBAR
+========================= */
+
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+
+::-webkit-scrollbar-track {
+    background: #07110d;
+}
+
+
+::-webkit-scrollbar-thumb {
+    background: #3f7a52;
+    border-radius: 10px;
+}
+
+
+::-webkit-scrollbar-thumb:hover {
+    background: #d4a64a;
+}
+
+
+/* =========================
+   MOBILE RESPONSIVE
+========================= */
+
+@media (max-width: 768px) {
+
+    main {
+        width: 90%;
+        margin: 25px auto;
+    }
+
+
+    .voice-buttons {
+        flex-direction: column;
+    }
+
+
+    .logo {
+        font-size: 30px;
+    }
+
+
+    .card {
+        padding: 20px;
+    }
+
+
+    h2 {
+        font-size: 24px;
+    }
+
+
+    #report {
+        padding: 20px;
+    }
+
+
+    .main-score {
+        font-size: 38px;
+    }
+
+
+    .attribute-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+
+    .attribute-score {
+        text-align: left;
+    }
+
+}
