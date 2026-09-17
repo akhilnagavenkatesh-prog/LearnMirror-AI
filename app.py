@@ -35,36 +35,110 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # =========================================================
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-3.6-flash"
+
+# Primary model + lightweight fallbacks.
+# These are current stable Gemini API model IDs.
+GEMINI_MODELS = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+]
+
+# Kept for existing console messages / compatibility.
+GEMINI_MODEL = GEMINI_MODELS[0]
 
 if not GEMINI_API_KEY:
     print("WARNING: GEMINI_API_KEY is not set.")
 
-gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+gemini_client = (
+    genai.Client(api_key=GEMINI_API_KEY)
+    if GEMINI_API_KEY
+    else None
+)
+
+
+class GeminiServiceError(RuntimeError):
+    """Safe, user-facing Gemini service error."""
+    pass
 
 
 def call_gemini(prompt):
-    """Send a prompt to the Gemini API."""
-    try:
-        if not gemini_client:
-            raise RuntimeError("GEMINI_API_KEY is not configured.")
+    """
+    Send a prompt to Gemini with retry + model fallback.
 
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
+    A temporary 503/high-demand response should not break the
+    LearnMirror AI experience. We retry the same model briefly,
+    then move to the next stable fallback model.
+    """
+    if not gemini_client:
+        raise GeminiServiceError(
+            "AI service is not configured. Please check GEMINI_API_KEY."
         )
 
-        answer = response.text
+    import time
 
-        if not answer:
-            raise RuntimeError("Gemini returned an empty response.")
+    last_error = None
 
-        return answer.strip()
+    for model in GEMINI_MODELS:
+        for attempt in range(2):
+            try:
+                print(
+                    f"Gemini request -> model={model}, "
+                    f"attempt={attempt + 1}/2"
+                )
 
-    except Exception as e:
-        raise RuntimeError(f"Gemini API failed: {str(e)}")
+                response = gemini_client.models.generate_content(
+                    model=model,
+                    contents=prompt
+                )
 
+                answer = getattr(response, "text", None)
 
+                if answer and answer.strip():
+                    print(f"Gemini success -> model={model}")
+                    return answer.strip()
+
+                last_error = RuntimeError(
+                    f"{model} returned an empty response."
+                )
+
+            except Exception as e:
+                last_error = e
+                error_text = str(e).lower()
+
+                is_temporary = (
+                    "503" in error_text
+                    or "unavailable" in error_text
+                    or "high demand" in error_text
+                    or "temporarily" in error_text
+                    or "service unavailable" in error_text
+                    or "429" in error_text
+                    or "rate limit" in error_text
+                    or "resource exhausted" in error_text
+                )
+
+                print(
+                    f"Gemini error -> model={model}, "
+                    f"attempt={attempt + 1}: {type(e).__name__}: {e}"
+                )
+
+                if not is_temporary:
+                    # For non-temporary errors, try the next model once
+                    # rather than exposing the raw provider error.
+                    break
+
+                if attempt == 0:
+                    time.sleep(1.5)
+
+    print(
+        "All Gemini models/retries failed.",
+        type(last_error).__name__ if last_error else ""
+    )
+
+    raise GeminiServiceError(
+        "The AI service is temporarily busy. "
+        "Please try again in a few seconds."
+    )
 # HELPER FUNCTIONS
 # =========================================================
 
@@ -694,27 +768,28 @@ Answer the student's question now.
     # GENERAL ERROR
     # =========================================================
 
-    except Exception as e:
+    except GeminiServiceError as e:
 
-        print(
-            "\nAI TUTOR ERROR:"
-        )
-
-        print(
-            type(e).__name__
-        )
-
-        print(
-            str(e)
-        )
+        print("\nAI TUTOR SERVICE ERROR:")
+        print(str(e))
 
         return jsonify({
-
             "success": False,
+            "error": str(e),
+            "message": str(e)
+        }), 503
 
+    except Exception as e:
+
+        print("\nAI TUTOR ERROR:")
+        print(type(e).__name__)
+        print(str(e))
+
+        return jsonify({
+            "success": False,
             "error":
-                str(e)
-
+                "The AI Tutor could not process your request. "
+                "Please try again."
         }), 500
 
 
@@ -1694,28 +1769,30 @@ All scores must be integers from 0 to 100.
     # GENERAL ERROR
     # =========================================================
 
-    except Exception as e:
+    except GeminiServiceError as e:
 
-        print(
-            "\nUNDERSTANDING EVALUATION ERROR:"
-        )
-
-        print(
-            type(e).__name__
-        )
-
-        print(
-            str(e)
-        )
+        print("\nUNDERSTANDING AI SERVICE ERROR:")
+        print(str(e))
 
         return jsonify({
+            "success": False,
+            "report_available": False,
+            "error": str(e),
+            "message": str(e)
+        }), 503
 
-            "success":
-                False,
+    except Exception as e:
 
+        print("\nUNDERSTANDING EVALUATION ERROR:")
+        print(type(e).__name__)
+        print(str(e))
+
+        return jsonify({
+            "success": False,
+            "report_available": False,
             "error":
-                str(e)
-
+                "The understanding evaluation could not be completed. "
+                "Please try again."
         }), 500
 
 
@@ -1742,5 +1819,5 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
-        debug=True
+        debug=False
     )
