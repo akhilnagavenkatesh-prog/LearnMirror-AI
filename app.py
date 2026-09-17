@@ -4,12 +4,12 @@ import os
 import json
 import uuid
 import PyPDF2
-import ollama
+from google import genai
 
 
 # =========================================================
 # LEARNMIRROR AI
-# Flask + Ollama
+# Flask + Gemini API
 # =========================================================
 
 app = Flask(__name__)
@@ -31,46 +31,40 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================================================
-# OLLAMA CONFIGURATION
+# GEMINI CONFIGURATION
 # =========================================================
 
-OLLAMA_MODEL = "llama3.2:latest"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = "gemini-2.5-flash"
+
+if not GEMINI_API_KEY:
+    print("WARNING: GEMINI_API_KEY is not set.")
+
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 
-def call_ollama(prompt):
-    """
-    Send a prompt to the local Ollama model.
-    """
-
+def call_gemini(prompt):
+    """Send a prompt to the Gemini API."""
     try:
+        if not gemini_client:
+            raise RuntimeError("GEMINI_API_KEY is not configured.")
 
-        response = ollama.chat(
-            model=OLLAMA_MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt
         )
 
-        answer = response["message"]["content"]
+        answer = response.text
 
         if not answer:
-            raise RuntimeError(
-                "Ollama returned an empty response."
-            )
+            raise RuntimeError("Gemini returned an empty response.")
 
         return answer.strip()
 
     except Exception as e:
-
-        raise RuntimeError(
-            f"Ollama connection failed: {str(e)}"
-        )
+        raise RuntimeError(f"Gemini API failed: {str(e)}")
 
 
-# =========================================================
 # HELPER FUNCTIONS
 # =========================================================
 
@@ -654,17 +648,17 @@ Answer the student's question now.
         print("========================================")
         print("        LEARNMIRROR AI TUTOR")
         print("========================================")
-        print("AI Engine :", "Ollama")
+        print("AI Engine :", "Gemini")
         print("Topic     :", topic)
         print("Question  :", question)
-        print("Model     :", OLLAMA_MODEL)
+        print("Model     :", GEMINI_MODEL)
         print("========================================")
 
         # =====================================================
-        # OLLAMA REQUEST
+        # GEMINI REQUEST
         # =====================================================
 
-        answer = call_ollama(
+        answer = call_gemini(
             prompt
         )
 
@@ -679,7 +673,7 @@ Answer the student's question now.
                 "success": False,
 
                 "error":
-                    "Ollama returned an empty response."
+                    "Gemini returned an empty response."
 
             }), 500
 
@@ -904,12 +898,12 @@ or
 """
 
         # =====================================================
-        # SEND RELEVANCE CHECK TO OLLAMA
+        # SEND RELEVANCE CHECK TO GEMINI
         # =====================================================
 
         try:
 
-            relevance_text = call_ollama(
+            relevance_text = call_gemini(
                 relevance_prompt
             )
 
@@ -917,8 +911,8 @@ or
             print("========================================")
             print("       LEARNMIRROR RELEVANCE CHECK")
             print("========================================")
-            print("AI Engine:", "Ollama")
-            print("Model:", OLLAMA_MODEL)
+            print("AI Engine:", "Gemini")
+            print("Model:", GEMINI_MODEL)
             print("Topic:", topic)
             print("Words:", word_count)
             print(
@@ -1354,15 +1348,15 @@ All scores must be integers from 0 to 100.
 """
 
         # =====================================================
-        # SEND TO OLLAMA
+        # SEND TO GEMINI
         # =====================================================
 
         print("\n")
         print("========================================")
         print("     LEARNMIRROR UNDERSTANDING AI")
         print("========================================")
-        print("AI Engine : Ollama")
-        print("Model     :", OLLAMA_MODEL)
+        print("AI Engine : Gemini")
+        print("Model     :", GEMINI_MODEL)
         print("Topic     :", topic)
         print("Words     :", word_count)
         print("----------------------------------------")
@@ -1373,7 +1367,7 @@ All scores must be integers from 0 to 100.
         print("Application      : Supporting")
         print("========================================")
 
-        ai_text = call_ollama(
+        ai_text = call_gemini(
             prompt
         )
 
@@ -1392,7 +1386,7 @@ All scores must be integers from 0 to 100.
                 "success": False,
 
                 "error":
-                    "Ollama returned an empty evaluation."
+                    "Gemini returned an empty evaluation."
 
             }), 500
 
@@ -1682,7 +1676,7 @@ All scores must be integers from 0 to 100.
     except json.JSONDecodeError:
 
         print(
-            "\nERROR: Ollama returned invalid JSON."
+            "\nERROR: Gemini returned invalid JSON."
         )
 
         return jsonify({
@@ -1735,8 +1729,8 @@ if __name__ == "__main__":
     print("========================================")
     print("          LEARNMIRROR AI")
     print("========================================")
-    print("AI Engine : Ollama")
-    print("AI Model  :", OLLAMA_MODEL)
+    print("AI Engine : Gemini")
+    print("AI Model  :", GEMINI_MODEL)
     print("PDF Tool  : PyPDF2")
     print("Evaluation: Concept Focused")
     print("Upload    : PDF only")
@@ -1746,7 +1740,7 @@ if __name__ == "__main__":
     print()
 
     app.run(
-        host="127.0.0.1",
-        port=5000,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
         debug=True
     )
