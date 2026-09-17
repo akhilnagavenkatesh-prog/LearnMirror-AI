@@ -3,4 +3,5 @@ PyPDF2
 Werkzeug
 gunicorn
 openai
-requestsgoogle-genai
+requests
+google-genai
