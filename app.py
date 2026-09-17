@@ -1,237 +1,1865 @@
 from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
-
 import os
+import json
+import uuid
 import PyPDF2
+import requests
 
+
+# =========================================================
+# LEARNMIRROR AI
+# Flask + Ollama Local AI
+# =========================================================
 
 app = Flask(__name__)
 
 
-# ==========================================
+# =========================================================
 # CONFIGURATION
-# ==========================================
+# =========================================================
 
 UPLOAD_FOLDER = "uploads"
-
 ALLOWED_EXTENSIONS = {"pdf"}
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+# Maximum upload size: 10 MB
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-# ==========================================
-# CHECK FILE TYPE
-# ==========================================
+# =========================================================
+# OLLAMA CONFIGURATION
+# =========================================================
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "llama3.2"
+
+
+# =========================================================
+# HELPER FUNCTIONS
+# =========================================================
 
 def allowed_file(filename):
+    """
+    Check whether the uploaded file is a PDF.
+    """
 
     return (
-        "." in filename
+        filename
+        and "." in filename
         and filename.rsplit(".", 1)[1].lower()
         in ALLOWED_EXTENSIONS
     )
 
 
-# ==========================================
-# HOME PAGE
-# ==========================================
+def safe_score(value):
+    """
+    Convert an AI-generated score into a safe integer
+    between 0 and 100.
+    """
+
+    try:
+        value = int(float(value))
+    except (ValueError, TypeError):
+        value = 0
+
+    return max(0, min(100, value))
+
+
+def extract_json_from_ai(text):
+    """
+    Safely extract JSON from an Ollama response.
+
+    Handles:
+    - normal JSON
+    - ```json ... ```
+    - extra text around JSON
+    """
+
+    if not text:
+        raise json.JSONDecodeError(
+            "Empty AI response",
+            "",
+            0
+        )
+
+    cleaned = text.strip()
+
+    # Remove markdown code fences
+    cleaned = cleaned.replace("```json", "")
+    cleaned = cleaned.replace("```", "")
+    cleaned = cleaned.strip()
+
+    # First attempt: direct JSON
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Second attempt: find JSON object
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+
+    if start != -1 and end != -1 and end > start:
+        possible_json = cleaned[start:end + 1]
+
+        return json.loads(possible_json)
+
+    raise json.JSONDecodeError(
+        "Could not find valid JSON",
+        cleaned,
+        0
+    )
+
+
+# =========================================================
+# ERROR HANDLER - FILE TOO LARGE
+# =========================================================
+
+@app.errorhandler(413)
+def file_too_large(error):
+
+    return jsonify({
+        "success": False,
+        "error": "File is too large. Maximum allowed size is 10 MB.",
+        "message": "File is too large. Maximum allowed size is 10 MB."
+    }), 413
+
+
+# =========================================================
+# HOME
+# =========================================================
 
 @app.route("/")
-def home():
+def index():
 
     return render_template("index.html")
 
 
-# ==========================================
-# PDF UPLOAD AND TEXT EXTRACTION
-# ==========================================
+# =========================================================
+# SYLLABUS PDF UPLOAD
+# =========================================================
 
 @app.route("/upload_syllabus", methods=["POST"])
 def upload_syllabus():
 
-    print("\n================================")
-    print("PDF UPLOAD REQUEST RECEIVED")
-    print("================================")
-
-
-    # Check file exists
-
-    if "file" not in request.files:
-
-        print("ERROR: File not received")
-
-        return jsonify({
-            "success": False,
-            "message": "No file received by server."
-        })
-
-
-    file = request.files["file"]
-
-
-    # Check filename
-
-    if file.filename == "":
-
-        print("ERROR: No file selected")
-
-        return jsonify({
-            "success": False,
-            "message": "No file selected."
-        })
-
-
-    # Check extension
-
-    if not allowed_file(file.filename):
-
-        print("ERROR: Invalid file type")
-
-        return jsonify({
-            "success": False,
-            "message": "Please upload only a PDF file."
-        })
-
-
-    # ==========================================
-    # SAVE PDF
-    # ==========================================
-
-    filename = secure_filename(file.filename)
-
-    filepath = os.path.join(
-        app.config["UPLOAD_FOLDER"],
-        filename
-    )
-
-
-    file.save(filepath)
-
-
-    print("PDF SAVED SUCCESSFULLY")
-    print("FILE PATH:", filepath)
-
-
-
-    # ==========================================
-    # EXTRACT PDF TEXT
-    # ==========================================
-
-    extracted_text = ""
-
-
     try:
 
+        print("\n")
+        print("========================================")
+        print("         LEARNMIRROR AI")
+        print("         SYLLABUS UPLOAD")
+        print("========================================")
+
+
+        # -----------------------------------------------------
+        # GET FILE
+        # -----------------------------------------------------
+
+        file = request.files.get("syllabus")
+
+        # Backward compatibility
+        if file is None:
+            file = request.files.get("file")
+
+
+        # -----------------------------------------------------
+        # NO FILE
+        # -----------------------------------------------------
+
+        if file is None:
+
+            print("ERROR: No file uploaded.")
+
+            return jsonify({
+                "success": False,
+                "error": "No syllabus file uploaded.",
+                "message": "No syllabus file uploaded."
+            }), 400
+
+
+        # -----------------------------------------------------
+        # EMPTY FILENAME
+        # -----------------------------------------------------
+
+        if not file.filename:
+
+            print("ERROR: Empty filename.")
+
+            return jsonify({
+                "success": False,
+                "error": "No file selected.",
+                "message": "No file selected."
+            }), 400
+
+
+        # -----------------------------------------------------
+        # FILE TYPE CHECK
+        # -----------------------------------------------------
+
+        if not allowed_file(file.filename):
+
+            print("ERROR: Invalid file type:", file.filename)
+
+            return jsonify({
+                "success": False,
+                "error": "Only PDF files are allowed.",
+                "message": "Only PDF files are allowed."
+            }), 400
+
+
+        # -----------------------------------------------------
+        # SECURE FILENAME
+        # -----------------------------------------------------
+
+        original_filename = secure_filename(file.filename)
+
+        if not original_filename:
+
+            return jsonify({
+                "success": False,
+                "error": "Invalid filename.",
+                "message": "Invalid filename."
+            }), 400
+
+
+        # -----------------------------------------------------
+        # UNIQUE FILENAME
+        # -----------------------------------------------------
+
+        # Prevent two files with the same name from
+        # overwriting each other.
+
+        name, extension = os.path.splitext(
+            original_filename
+        )
+
+        unique_filename = (
+            f"{name}_{uuid.uuid4().hex[:8]}{extension}"
+        )
+
+        filepath = os.path.join(
+            app.config["UPLOAD_FOLDER"],
+            unique_filename
+        )
+
+
+        # -----------------------------------------------------
+        # SAVE FILE
+        # -----------------------------------------------------
+
+        file.save(filepath)
+
+
+        print("Original file :", original_filename)
+        print("Saved file    :", unique_filename)
+        print("Location      :", filepath)
+        print("----------------------------------------")
+        print("Extracting PDF text...")
+
+
+        # -----------------------------------------------------
+        # PDF EXTRACTION
+        # -----------------------------------------------------
+
+        extracted_pages = []
 
         with open(filepath, "rb") as pdf_file:
 
-
             reader = PyPDF2.PdfReader(pdf_file)
 
+            total_pages = len(reader.pages)
 
-            print("TOTAL PAGES:", len(reader.pages))
+            print("Total pages   :", total_pages)
+
+            if total_pages == 0:
+
+                return jsonify({
+                    "success": False,
+                    "error": "The PDF contains no pages.",
+                    "message": "The PDF contains no pages."
+                }), 400
 
 
-            for i, page in enumerate(reader.pages):
-
+            for page_number, page in enumerate(
+                reader.pages,
+                start=1
+            ):
 
                 print(
-                    f"READING PAGE {i + 1}..."
+                    f"Reading page {page_number}/{total_pages}"
                 )
 
+                try:
 
-                page_text = page.extract_text()
+                    text = page.extract_text()
 
+                except Exception as page_error:
 
-                if page_text:
-
-                    extracted_text += (
-                        page_text + "\n"
+                    print(
+                        f"Page {page_number} extraction error:",
+                        str(page_error)
                     )
 
+                    text = ""
 
 
-        print("================================")
+                if text:
 
-        print(
-            "TOTAL CHARACTERS EXTRACTED:",
-            len(extracted_text)
-        )
+                    text = text.strip()
 
-        print("================================")
+                    if text:
+
+                        extracted_pages.append(
+                            text
+                        )
 
 
+        # -----------------------------------------------------
+        # COMBINE TEXT
+        # -----------------------------------------------------
+
+        extracted_text = "\n\n".join(
+            extracted_pages
+        ).strip()
+
+
+        # -----------------------------------------------------
+        # NO TEXT FOUND
+        # -----------------------------------------------------
+
+        if not extracted_text:
+
+            print("----------------------------------------")
+            print("ERROR: No text could be extracted.")
+            print("The PDF may be scanned/image based.")
+            print("========================================")
+
+            return jsonify({
+                "success": False,
+                "error":
+                    "Could not extract text from this PDF. "
+                    "The PDF may be scanned/image based. "
+                    "Please upload a text-based PDF.",
+                "message":
+                    "Could not extract text from this PDF. "
+                    "The PDF may be scanned/image based. "
+                    "Please upload a text-based PDF."
+            }), 400
+
+
+        # -----------------------------------------------------
+        # SUCCESS
+        # -----------------------------------------------------
+
+        print("----------------------------------------")
+        print("PDF extraction successful.")
+        print("Characters extracted:", len(extracted_text))
+        print("Pages with text     :", len(extracted_pages))
+        print("========================================")
+        print()
+
+
+        return jsonify({
+
+            "success": True,
+
+            # Return original name to the frontend
+            "filename": original_filename,
+
+            # Extracted syllabus text
+            "text": extracted_text,
+
+            "message":
+                "Syllabus extracted successfully!"
+
+        })
+
+
+    # ---------------------------------------------------------
+    # PDF ERROR
+    # ---------------------------------------------------------
+
+    except PyPDF2.errors.PdfReadError as e:
+
+        print("\nPDF READ ERROR:")
+        print(str(e))
+
+        return jsonify({
+
+            "success": False,
+
+            "error":
+                "Unable to read this PDF. "
+                "The file may be corrupted or invalid.",
+
+            "message":
+                "Unable to read this PDF. "
+                "The file may be corrupted or invalid."
+
+        }), 400
+
+
+    # ---------------------------------------------------------
+    # GENERAL ERROR
+    # ---------------------------------------------------------
 
     except Exception as e:
 
-
-        print("PDF EXTRACTION ERROR:")
+        print("\nUPLOAD ERROR:")
+        print(type(e).__name__)
         print(str(e))
-
+        print()
 
         return jsonify({
 
             "success": False,
 
-            "message":
-                "Error reading PDF: " + str(e)
+            "error": str(e),
 
-        })
+            "message": str(e)
 
-
-
-    # ==========================================
-    # CHECK TEXT
-    # ==========================================
-
-    if not extracted_text.strip():
+        }), 500
 
 
-        print(
-            "NO TEXT COULD BE EXTRACTED"
+# =========================================================
+# AI TUTOR
+# =========================================================
+
+@app.route("/ask_tutor", methods=["POST"])
+def ask_tutor():
+
+    try:
+
+        # -----------------------------------------------------
+        # GET JSON DATA
+        # -----------------------------------------------------
+
+        data = request.get_json(silent=True)
+
+
+        if not data:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "No request data received."
+
+            }), 400
+
+
+        # -----------------------------------------------------
+        # GET TOPIC
+        # -----------------------------------------------------
+
+        topic = str(
+            data.get("topic", "")
+        ).strip()
+
+
+        # -----------------------------------------------------
+        # GET QUESTION
+        # -----------------------------------------------------
+
+        question = str(
+            data.get("question", "")
+        ).strip()
+
+
+        # -----------------------------------------------------
+        # VALIDATE TOPIC
+        # -----------------------------------------------------
+
+        if not topic:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "Please select a topic first."
+
+            }), 400
+
+
+        # -----------------------------------------------------
+        # VALIDATE QUESTION
+        # -----------------------------------------------------
+
+        if not question:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "Please enter a question."
+
+            }), 400
+
+
+        # =====================================================
+        # TUTOR PROMPT
+        # =====================================================
+
+        prompt = f"""
+You are LearnMirror AI Tutor.
+
+Your purpose is to help a student understand an academic
+topic clearly.
+
+Selected Topic:
+{topic}
+
+Student Question:
+{question}
+
+Instructions:
+
+1. Explain the concept clearly and simply.
+
+2. Use beginner-friendly language.
+
+3. Give a small example when useful.
+
+4. Keep the answer focused.
+
+5. Focus mainly on the selected topic.
+
+6. If the student asks for code, provide a simple
+   understandable example.
+
+7. Explain difficult terms when necessary.
+
+8. Encourage understanding instead of memorization.
+
+9. If the question is unclear, explain the most likely
+   interpretation.
+
+10. Do not unnecessarily repeat the question.
+
+Answer the student's question now.
+"""
+
+
+        # =====================================================
+        # CONSOLE LOG
+        # =====================================================
+
+        print("\n")
+        print("========================================")
+        print("        LEARNMIRROR AI TUTOR")
+        print("========================================")
+        print("Topic    :", topic)
+        print("Question :", question)
+        print("Model    :", OLLAMA_MODEL)
+        print("========================================")
+
+
+        # =====================================================
+        # OLLAMA REQUEST
+        # =====================================================
+
+        ollama_response = requests.post(
+
+            OLLAMA_URL,
+
+            json={
+
+                "model": OLLAMA_MODEL,
+
+                "prompt": prompt,
+
+                "stream": False
+
+            },
+
+            timeout=120
+
         )
 
 
+        # -----------------------------------------------------
+        # HTTP ERROR
+        # -----------------------------------------------------
+
+        ollama_response.raise_for_status()
+
+
+        # -----------------------------------------------------
+        # GET RESULT
+        # -----------------------------------------------------
+
+        result = ollama_response.json()
+
+
+        answer = str(
+            result.get("response", "")
+        ).strip()
+
+
+        # -----------------------------------------------------
+        # EMPTY RESPONSE
+        # -----------------------------------------------------
+
+        if not answer:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "Ollama returned an empty response."
+
+            }), 500
+
+
+        # -----------------------------------------------------
+        # SUCCESS
+        # -----------------------------------------------------
+
         return jsonify({
 
-            "success": False,
+            "success": True,
 
-            "message":
-                "No text found in this PDF. It may be a scanned/image PDF."
+            "answer": answer
 
         })
 
 
+    # =========================================================
+    # OLLAMA CONNECTION ERROR
+    # =========================================================
 
-    # ==========================================
-    # SUCCESS RESPONSE
-    # ==========================================
+    except requests.exceptions.ConnectionError:
 
-    print("PDF TEXT EXTRACTION SUCCESSFUL")
+        print(
+            "\nERROR: Cannot connect to Ollama."
+        )
 
+        return jsonify({
 
-    return jsonify({
+            "success": False,
 
-        "success": True,
+            "error":
+                "Cannot connect to Ollama. "
+                "Please make sure Ollama is running."
 
-        "text": extracted_text,
-
-        "message":
-            "Syllabus extracted successfully!"
-
-    })
+        }), 503
 
 
+    # =========================================================
+    # TIMEOUT
+    # =========================================================
 
-# ==========================================
-# RUN APPLICATION
-# ==========================================
+    except requests.exceptions.Timeout:
+
+        print(
+            "\nERROR: AI Tutor timed out."
+        )
+
+        return jsonify({
+
+            "success": False,
+
+            "error":
+                "AI Tutor took too long to respond. "
+                "Please try again."
+
+        }), 504
+
+
+    # =========================================================
+    # REQUEST ERROR
+    # =========================================================
+
+    except requests.exceptions.RequestException as e:
+
+        print(
+            "\nOLLAMA REQUEST ERROR:"
+        )
+
+        print(str(e))
+
+        return jsonify({
+
+            "success": False,
+
+            "error":
+                "Ollama request failed: " + str(e)
+
+        }), 500
+
+
+    # =========================================================
+    # GENERAL ERROR
+    # =========================================================
+
+    except Exception as e:
+
+        print(
+            "\nAI TUTOR ERROR:"
+        )
+
+        print(type(e).__name__)
+        print(str(e))
+
+        return jsonify({
+
+            "success": False,
+
+            "error": str(e)
+
+        }), 500
+
+# =========================================================
+# AI UNDERSTANDING EVALUATION
+# =========================================================
+
+@app.route(
+    "/evaluate_understanding",
+    methods=["POST"]
+)
+def evaluate_understanding():
+
+    try:
+
+        # =====================================================
+        # GET DATA
+        # =====================================================
+
+        data = request.get_json(silent=True)
+
+
+        if not data:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "No evaluation data received."
+
+            }), 400
+
+
+        # =====================================================
+        # GET TOPIC
+        # =====================================================
+
+        topic = str(
+            data.get("topic", "")
+        ).strip()
+
+
+        # =====================================================
+        # GET EXPLANATION
+        # =====================================================
+
+        explanation = str(
+            data.get("explanation", "")
+        ).strip()
+
+
+        # =====================================================
+        # VALIDATION
+        # =====================================================
+
+        if not topic:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "No topic selected."
+
+            }), 400
+
+
+        if not explanation:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "Please explain the topic before evaluation."
+
+            }), 400
+
+
+        # =====================================================
+        # WORD COUNT
+        # =====================================================
+
+        word_count = len(
+            explanation.split()
+        )
+
+
+        # =====================================================
+        # EMPTY / MEANINGLESS ANSWER
+        # =====================================================
+
+        if word_count < 3:
+
+            return jsonify({
+
+                "success": True,
+
+                "concept_accuracy": 0,
+
+                "recall": 0,
+
+                "application": 0,
+
+                "explanation_depth": 0,
+
+                "overall_score": 0,
+
+                "feedback":
+                    "Please provide a meaningful explanation "
+                    "of the selected topic.",
+
+                "unlock": False
+
+            })
+
+
+        # =====================================================
+        # TOPIC RELEVANCE CHECK
+        # =====================================================
+
+        relevance_prompt = f"""
+You are the relevance checker for LearnMirror AI.
+
+Your ONLY job is to determine whether the student's answer
+is meaningfully related to the selected academic topic.
+
+SELECTED TOPIC:
+{topic}
+
+STUDENT ANSWER:
+{explanation}
+
+STRICT RULES:
+
+1. The answer MUST actually discuss the selected topic.
+2. The answer must contain meaningful academic information
+   related to the selected topic.
+3. Gibberish, random letters, random words, repeated words,
+   meaningless text, or keyboard typing must be considered
+   NOT RELATED.
+4. A very short answer can be related if it contains a correct
+   and meaningful concept from the selected topic.
+5. Do NOT judge based only on the number of words.
+6. Do NOT give credit for generic academic words.
+7. The answer must demonstrate at least some actual knowledge
+   of the selected topic.
+8. If the answer is about another topic, mark it NOT RELATED.
+9. If the answer is uncertain, vague, or does not demonstrate
+   meaningful knowledge of the selected topic, mark it NOT RELATED.
+10. The answer does not need to use the exact textbook wording.
+11. Closely related terminology, abbreviations, examples, or
+    correct explanations should be accepted when they clearly
+    refer to the selected topic.
+
+Return ONLY valid JSON.
+
+Return exactly:
+
+{{
+    "relevant": true
+}}
+
+or
+
+{{
+    "relevant": false
+}}
+"""
+
+        # =====================================================
+        # SEND RELEVANCE CHECK TO OLLAMA
+        # =====================================================
+
+        try:
+
+            relevance_response = requests.post(
+
+                OLLAMA_URL,
+
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": relevance_prompt,
+                    "stream": False,
+                    "format": "json"
+                },
+
+                timeout=60
+            )
+
+            relevance_response.raise_for_status()
+
+            relevance_result = relevance_response.json()
+
+            relevance_text = str(
+                relevance_result.get("response", "")
+            ).strip()
+
+            print("\n")
+            print("========================================")
+            print("       LEARNMIRROR RELEVANCE CHECK")
+            print("========================================")
+            print("Topic:", topic)
+            print("Words:", word_count)
+            print("Raw response:", relevance_text)
+            print("========================================")
+
+            relevance_data = extract_json_from_ai(
+                relevance_text
+            )
+
+            relevant = bool(
+                relevance_data.get("relevant", False)
+            )
+
+        except Exception as e:
+
+            print("\nRELEVANCE CHECK ERROR:")
+            print(type(e).__name__)
+            print(str(e))
+
+            # Fail safely:
+            # If relevance cannot be verified, do not generate
+            # an Understanding Report.
+
+            return jsonify({
+
+                "success": False,
+
+                "relevant": False,
+
+                "report_available": False,
+
+                "error":
+                    "Unable to verify whether the answer is related "
+                    "to the selected topic. Please try again."
+
+            }), 500
+
+
+        # =====================================================
+        # STOP IF ANSWER IS NOT RELATED
+        # =====================================================
+
+        if not relevant:
+
+            print("\n")
+            print("========================================")
+            print("       ANSWER NOT RELATED")
+            print("========================================")
+            print("Topic:", topic)
+            print("No understanding score generated.")
+            print("========================================")
+            print()
+
+            return jsonify({
+
+                "success": True,
+
+                "relevant": False,
+
+                "report_available": False,
+
+                "concept_accuracy": None,
+
+                "recall": None,
+
+                "application": None,
+
+                "explanation_depth": None,
+
+                "overall_score": None,
+
+                "unlock": False,
+
+                "message":
+                    "Your answer is not related to the selected topic.",
+
+                "error":
+                    "Please explain the selected topic in your own words "
+                    "to receive your Understanding Report."
+
+            })
+
+        # =====================================================
+        # LEARNMIRROR UNDERSTANDING EVALUATOR
+        # =====================================================
+
+        prompt = f"""
+You are LearnMirror AI, an academic understanding evaluator.
+
+Evaluate the student's Teach-Back explanation of the
+selected academic topic.
+
+Your PRIMARY goal is to determine whether the student
+actually understands the topic.
+
+=========================================================
+SELECTED TOPIC
+=========================================================
+
+{topic}
+
+
+=========================================================
+STUDENT ANSWER
+=========================================================
+
+{explanation}
+
+
+=========================================================
+VERY IMPORTANT SCORING PHILOSOPHY
+=========================================================
+
+CORRECTNESS IS MORE IMPORTANT THAN LENGTH.
+
+Do NOT give marks because the student wrote many words.
+
+Do NOT reduce marks simply because the student wrote
+a concise answer.
+
+A short but correct explanation can receive 80% or higher
+when it demonstrates strong understanding of the core topic.
+
+A long answer should NOT receive a high score merely because
+it contains many words.
+
+Repetition does not increase marks.
+
+Irrelevant information does not increase marks.
+
+Incorrect information should reduce the score.
+
+
+=========================================================
+STEP 1 — RELEVANCE
+=========================================================
+
+Determine whether the student actually explains the selected
+topic.
+
+If the answer is:
+
+- gibberish
+- meaningless
+- completely unrelated
+- random text
+- only repeated words
+- about another topic
+
+then all scores must be 0.
+
+
+=========================================================
+STEP 2 — CONCEPT ACCURACY
+=========================================================
+
+This is the MOST IMPORTANT category.
+
+Score 0-100.
+
+Evaluate:
+
+- correct definitions
+- correct concepts
+- factual correctness
+- correct terminology
+- absence of misconceptions
+- understanding of the main idea
+
+Scoring:
+
+0-20   = no meaningful understanding
+21-40  = very weak understanding
+41-60  = basic/incomplete understanding
+61-79  = mostly correct
+80-89  = strong understanding
+90-100 = excellent understanding
+
+IMPORTANT:
+
+If the student correctly explains the MAIN concept
+in their own words, Concept Accuracy should be high.
+
+Do not demand textbook wording.
+
+
+=========================================================
+STEP 3 — RECALL / IMPORTANT POINTS
+=========================================================
+
+Score 0-100.
+
+Evaluate whether the student remembers the important
+points of the topic.
+
+Consider:
+
+- definitions
+- features
+- characteristics
+- components
+- principles
+- syntax where relevant
+- important properties
+- terminology
+- major points
+
+Do NOT require every minor textbook detail.
+
+If the student covers the main important points,
+give a strong Recall score.
+
+
+=========================================================
+STEP 4 — APPLICATION
+=========================================================
+
+Score 0-100.
+
+Look for:
+
+- examples
+- practical uses
+- real-world applications
+- where it is used
+- how it is used
+
+BUT:
+
+Application must NOT heavily punish a correct theoretical
+answer.
+
+Some academic topics are mainly theoretical.
+
+If the student correctly explains the topic but does not
+give a real-world application, Concept Accuracy and Recall
+can still be high.
+
+Do NOT make Application mandatory for every topic.
+
+If the student gives a correct example/program, reward it.
+
+
+=========================================================
+STEP 5 — EXPLANATION QUALITY
+=========================================================
+
+Score 0-100.
+
+Evaluate:
+
+- clarity
+- logical flow
+- own-word explanation
+- meaningful detail
+- relationship between concepts
+- reasoning
+- understandable presentation
+
+Do NOT use word count as the main factor.
+
+A 150-word excellent explanation can score higher than
+an 800-word poor explanation.
+
+
+=========================================================
+STEP 6 — LENGTH
+=========================================================
+
+Word count is INFORMATION ONLY.
+
+Never give marks simply because an answer is long.
+
+Never automatically reduce marks because an answer is short.
+
+Judge the actual knowledge demonstrated.
+
+
+=========================================================
+STEP 7 — SCORE CALCULATION
+=========================================================
+
+Use this scoring structure:
+
+Concept Accuracy = 50%
+Recall = 30%
+Explanation Quality = 20%
+
+Application is treated as a SUPPORTING factor rather than
+a major penalty.
+
+Calculate the BASE SCORE:
+
+Base Score =
+(
+    Concept Accuracy * 0.50
+    +
+    Recall * 0.30
+    +
+    Explanation Quality * 0.20
+)
+
+
+Then consider Application.
+
+Application should only improve the result when the student
+actually demonstrates useful application or examples.
+
+Application should NOT significantly reduce an otherwise
+correct theoretical explanation.
+
+
+=========================================================
+SCORE CALIBRATION
+=========================================================
+
+If the student:
+
+- correctly understands the main concept
+- covers most important points
+- explains clearly
+- has no major misconceptions
+
+then the score should generally be capable of reaching
+80% or higher.
+
+For example:
+
+Concept Accuracy = 85
+Recall = 80
+Explanation Quality = 80
+
+Base Score:
+
+85 * 0.50 = 42.5
+80 * 0.30 = 24
+80 * 0.20 = 16
+
+Base Score = 82.5
+
+This should result in approximately 83%.
+
+Even if Application is low, DO NOT destroy this score.
+
+
+=========================================================
+EXAMPLE
+=========================================================
+
+Topic:
+
+Array of Objects in C++
+
+If the student correctly explains:
+
+- what an array of objects is
+- why it is used
+- object creation
+- syntax
+- accessing objects
+- example program
+- important characteristics
+
+then the answer should be considered a strong
+understanding even if no real-world application is given.
+
+
+=========================================================
+WRONG ANSWER
+=========================================================
+
+If the student writes 800 words but contains:
+
+- incorrect definitions
+- unrelated content
+- repeated content
+- misconceptions
+
+then do NOT give 80+ merely because of the word count.
+
+
+=========================================================
+FEEDBACK
+=========================================================
+
+Give specific feedback.
+
+Mention:
+
+1. What was explained correctly.
+2. Important points successfully covered.
+3. Missing important concepts.
+4. What can be improved.
+
+Do not criticize the student simply because the answer
+is short.
+
+For a strong answer, explicitly acknowledge that the
+student demonstrated good conceptual understanding.
+
+
+=========================================================
+OUTPUT
+=========================================================
+
+Return ONLY valid JSON.
+
+Do NOT use markdown.
+
+Do NOT use ```json.
+
+Do NOT write anything outside JSON.
+
+Return exactly:
+
+{{
+    "concept_accuracy": 0,
+    "recall": 0,
+    "application": 0,
+    "explanation_depth": 0,
+    "feedback": "Specific feedback."
+}}
+
+All scores must be integers from 0 to 100.
+"""
+
+
+        # =====================================================
+        # SEND TO OLLAMA
+        # =====================================================
+
+        print("\n")
+        print("========================================")
+        print("     LEARNMIRROR UNDERSTANDING AI")
+        print("========================================")
+        print("Topic:", topic)
+        print("Words:", word_count)
+        print("Model:", OLLAMA_MODEL)
+        print("----------------------------------------")
+        print("SCORING WEIGHTS")
+        print("Concept Accuracy : 50%")
+        print("Recall           : 30%")
+        print("Explanation      : 20%")
+        print("Application      : Supporting")
+        print("========================================")
+
+
+        ollama_response = requests.post(
+
+            OLLAMA_URL,
+
+            json={
+
+                "model": OLLAMA_MODEL,
+
+                "prompt": prompt,
+
+                "stream": False,
+
+                "format": "json"
+
+            },
+
+            timeout=120
+
+        )
+
+
+        # =====================================================
+        # CHECK HTTP RESPONSE
+        # =====================================================
+
+        ollama_response.raise_for_status()
+
+
+        # =====================================================
+        # READ OLLAMA RESPONSE
+        # =====================================================
+
+        result = ollama_response.json()
+
+
+        ai_text = str(
+            result.get("response", "")
+        ).strip()
+
+
+        print("\nRAW AI RESPONSE:")
+        print(ai_text)
+        print()
+
+
+        # =====================================================
+        # EMPTY AI RESPONSE
+        # =====================================================
+
+        if not ai_text:
+
+            return jsonify({
+
+                "success": False,
+
+                "error":
+                    "Ollama returned an empty evaluation."
+
+            }), 500
+
+
+        # =====================================================
+        # PARSE JSON
+        # =====================================================
+
+        evaluation = extract_json_from_ai(
+            ai_text
+        )
+
+
+        if not isinstance(
+            evaluation,
+            dict
+        ):
+
+            raise json.JSONDecodeError(
+                "AI evaluation is not a JSON object.",
+                ai_text,
+                0
+            )
+
+
+        # =====================================================
+        # GET SCORES
+        # =====================================================
+
+        concept_accuracy = safe_score(
+            evaluation.get(
+                "concept_accuracy",
+                0
+            )
+        )
+
+
+        recall = safe_score(
+            evaluation.get(
+                "recall",
+                0
+            )
+        )
+
+
+        application = safe_score(
+            evaluation.get(
+                "application",
+                0
+            )
+        )
+
+
+        explanation_depth = safe_score(
+            evaluation.get(
+                "explanation_depth",
+                0
+            )
+        )
+
+
+        # =====================================================
+        # FINAL SCORE
+        # =====================================================
+        #
+        # Concept Accuracy = 50%
+        # Recall           = 30%
+        # Explanation      = 20%
+        #
+        # Application is a supporting bonus.
+        #
+
+        base_score = (
+
+            (concept_accuracy * 0.50)
+
+            +
+
+            (recall * 0.30)
+
+            +
+
+            (explanation_depth * 0.20)
+
+        )
+
+
+        # =====================================================
+        # APPLICATION BONUS
+        # =====================================================
+
+        application_bonus = 0
+
+
+        if application >= 80:
+
+            application_bonus = 5
+
+        elif application >= 60:
+
+            application_bonus = 3
+
+        elif application >= 40:
+
+            application_bonus = 1
+
+        else:
+
+            application_bonus = 0
+
+
+        # =====================================================
+        # CALCULATE OVERALL SCORE
+        # =====================================================
+
+        overall_score = round(
+            base_score + application_bonus
+        )
+
+
+        overall_score = max(
+            0,
+            min(
+                100,
+                overall_score
+            )
+        )
+
+
+        # =====================================================
+        # IMPORTANT SCORE BOOST
+        # =====================================================
+        #
+        # Strong conceptual understanding should be capable
+        # of reaching 80+ even when application is low.
+        #
+
+        if (
+
+            concept_accuracy >= 85
+
+            and
+
+            recall >= 80
+
+            and
+
+            explanation_depth >= 75
+
+        ):
+
+            if overall_score < 80:
+
+                overall_score = 80
+
+
+        # =====================================================
+        # STRONG CONCEPTUAL ANSWER
+        # =====================================================
+
+        if (
+
+            concept_accuracy >= 90
+
+            and
+
+            recall >= 80
+
+            and
+
+            explanation_depth >= 80
+
+        ):
+
+            if overall_score < 85:
+
+                overall_score = 85
+
+
+        # =====================================================
+        # UNLOCK
+        # =====================================================
+
+        unlock = (
+            overall_score >= 80
+        )
+
+
+        # =====================================================
+        # FEEDBACK
+        # =====================================================
+
+        feedback = evaluation.get(
+
+            "feedback",
+
+            "Review the topic and try explaining it again."
+
+        )
+
+
+        if not isinstance(
+            feedback,
+            str
+        ):
+
+            feedback = str(
+                feedback
+            )
+
+
+        feedback = feedback.strip()
+
+
+        if not feedback:
+
+            feedback = (
+                "Review the topic and try explaining it again."
+            )
+
+
+        # =====================================================
+        # CONSOLE RESULT
+        # =====================================================
+
+        print("========================================")
+        print("        FINAL EVALUATION")
+        print("========================================")
+
+        print(
+            "Concept Accuracy :",
+            concept_accuracy
+        )
+
+        print(
+            "Recall           :",
+            recall
+        )
+
+        print(
+            "Application      :",
+            application
+        )
+
+        print(
+            "Explanation      :",
+            explanation_depth
+        )
+
+        print(
+            "Base Score       :",
+            round(base_score, 2)
+        )
+
+        print(
+            "Application Bonus:",
+            application_bonus
+        )
+
+        print(
+            "FINAL SCORE      :",
+            overall_score
+        )
+
+        print(
+            "UNLOCK           :",
+            unlock
+        )
+
+        print("========================================")
+        print()
+
+
+        # =====================================================
+        # RESPONSE TO JAVASCRIPT
+        # =====================================================
+
+        return jsonify({
+
+            "success": True,
+
+            "concept_accuracy":
+                concept_accuracy,
+
+            "recall":
+                recall,
+
+            "application":
+                application,
+
+            "explanation_depth":
+                explanation_depth,
+
+            "overall_score":
+                overall_score,
+
+            "feedback":
+                feedback,
+
+            "unlock":
+                unlock
+
+        })
+
+
+    # =========================================================
+    # INVALID JSON
+    # =========================================================
+
+    except json.JSONDecodeError:
+
+        print(
+            "\nERROR: Ollama returned invalid JSON."
+        )
+
+        return jsonify({
+
+            "success": False,
+
+            "error":
+                "AI returned an invalid evaluation format. "
+                "Please try again."
+
+        }), 500
+
+
+    # =========================================================
+    # OLLAMA CONNECTION ERROR
+    # =========================================================
+
+    except requests.exceptions.ConnectionError:
+
+        print(
+            "\nERROR: Cannot connect to Ollama."
+        )
+
+        return jsonify({
+
+            "success": False,
+
+            "error":
+                "Cannot connect to Ollama. "
+                "Please make sure Ollama is running."
+
+        }), 503
+
+
+    # =========================================================
+    # TIMEOUT
+    # =========================================================
+
+    except requests.exceptions.Timeout:
+
+        print(
+            "\nERROR: Understanding evaluation timed out."
+        )
+
+        return jsonify({
+
+            "success": False,
+
+            "error":
+                "AI evaluation took too long to respond. "
+                "Please try again."
+
+        }), 504
+
+
+    # =========================================================
+    # REQUEST ERROR
+    # =========================================================
+
+    except requests.exceptions.RequestException as e:
+
+        print(
+            "\nEVALUATION REQUEST ERROR:"
+        )
+
+        print(str(e))
+
+        return jsonify({
+
+            "success": False,
+
+            "error":
+                "Ollama evaluation failed: " + str(e)
+
+        }), 500
+
+
+    # =========================================================
+    # GENERAL ERROR
+    # =========================================================
+
+    except Exception as e:
+
+        print(
+            "\nUNDERSTANDING EVALUATION ERROR:"
+        )
+
+        print(type(e).__name__)
+        print(str(e))
+
+        return jsonify({
+
+            "success": False,
+
+            "error": str(e)
+
+        }), 500
+
+
+# =========================================================
+# RUN FLASK SERVER
+# =========================================================
 
 if __name__ == "__main__":
 
+    print("\n")
+    print("========================================")
+    print("          LEARNMIRROR AI")
+    print("========================================")
+    print("AI Engine : Ollama")
+    print("AI Model  :", OLLAMA_MODEL)
+    print("PDF Tool  : PyPDF2")
+    print("Evaluation: Concept Focused")
+    print("Upload    : PDF only")
+    print("Max File  : 10 MB")
+    print("Server    : http://127.0.0.1:5000")
+    print("========================================")
+    print()
+
+
     app.run(
-        debug=True,
-        use_reloader=False
+
+        host="127.0.0.1",
+
+        port=5000,
+
+        debug=True
+
     )

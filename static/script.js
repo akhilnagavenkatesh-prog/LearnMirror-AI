@@ -1,11 +1,26 @@
-/* =========================================
-   LEARNMIRROR AI - SCRIPT.JS
-========================================= */
+/* =========================================================
+   LEARNMIRROR AI - COMPLETE SCRIPT.JS
+   =========================================================
+
+   Features:
+   1. PDF syllabus upload
+   2. PDF text extraction through Flask
+   3. Topic extraction
+   4. Personalized day-wise learning plan
+   5. 5 topics per row
+   6. Topic selection
+   7. Learning resources
+   8. AI Tutor through Ollama + Flask
+   9. Voice recognition
+   10. Teach Back evaluation
+   11. Understanding Report
+   12. 80% next-topic unlock
+   ========================================================= */
 
 
-/* =========================================
+/* =========================================================
    GLOBAL VARIABLES
-========================================= */
+========================================================= */
 
 let topics = [];
 
@@ -16,9 +31,17 @@ let recognition = null;
 let isRecording = false;
 
 
-/* =========================================
-   UPLOAD SYLLABUS
-========================================= */
+/*
+   Stores topics that have been unlocked.
+   Topic 0 is unlocked automatically.
+*/
+
+let unlockedTopics = new Set([0]);
+
+
+/* =========================================================
+   PDF SYLLABUS UPLOAD
+========================================================= */
 
 async function uploadSyllabus() {
 
@@ -35,393 +58,1350 @@ async function uploadSyllabus() {
         document.getElementById("uploadStatus");
 
 
-    if (!fileInput.files.length) {
+    /* -----------------------------------------------------
+       CHECK INPUT
+    ----------------------------------------------------- */
+
+    if (!fileInput) {
+
+        console.error(
+            "❌ syllabusFile element not found."
+        );
 
         return;
+    }
+
+
+    if (
+        !fileInput.files ||
+        fileInput.files.length === 0
+    ) {
+
+        return;
+    }
+
+
+    const file =
+        fileInput.files[0];
+
+
+    /* -----------------------------------------------------
+       DEBUG
+    ----------------------------------------------------- */
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "LEARNMIRROR AI - PDF UPLOAD"
+    );
+
+    console.log(
+        "File:",
+        file.name
+    );
+
+    console.log(
+        "Type:",
+        file.type
+    );
+
+    console.log(
+        "Size:",
+        file.size,
+        "bytes"
+    );
+
+    console.log(
+        "========================================"
+    );
+
+
+    /* -----------------------------------------------------
+       CHECK PDF
+    ----------------------------------------------------- */
+
+    const isPDF =
+        file.type === "application/pdf" ||
+        file.name
+            .toLowerCase()
+            .endsWith(".pdf");
+
+
+    if (!isPDF) {
+
+        if (uploadStatus) {
+
+            uploadStatus.innerText =
+                "❌ Please select a PDF file.";
+
+        }
+
+        fileInput.value = "";
+
+        return;
+    }
+
+
+    /* -----------------------------------------------------
+       SHOW FILE NAME
+    ----------------------------------------------------- */
+
+    if (fileName) {
+
+        fileName.innerText =
+            "📄 Selected: " +
+            file.name;
 
     }
 
 
-    const file = fileInput.files[0];
+    /* -----------------------------------------------------
+       SHOW LOADING
+    ----------------------------------------------------- */
+
+    if (uploadStatus) {
+
+        uploadStatus.innerText =
+            "⏳ Uploading and extracting syllabus...";
+
+    }
 
 
-    /* Show file name */
+    /* -----------------------------------------------------
+       CREATE FORM DATA
+    ----------------------------------------------------- */
 
-    fileName.innerText =
-        "📄 Selected: " + file.name;
-
-
-    uploadStatus.innerText =
-        "⏳ Extracting syllabus content...";
+    const formData =
+        new FormData();
 
 
-    const formData = new FormData();
+    /*
+       IMPORTANT:
 
-    formData.append("file", file);
+       Flask expects:
+       request.files.get("syllabus")
+    */
 
+    formData.append(
+        "syllabus",
+        file
+    );
+
+
+    /* -----------------------------------------------------
+       SEND TO FLASK
+    ----------------------------------------------------- */
 
     try {
 
+        console.log(
+            "📤 Sending PDF to Flask..."
+        );
+
+
         const response =
-            await fetch("/upload_syllabus", {
+            await fetch(
+                "/upload_syllabus",
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
 
-                method: "POST",
 
-                body: formData
+        console.log(
+            "📡 Server status:",
+            response.status
+        );
 
-            });
+
+        /* -------------------------------------------------
+           GET RAW RESPONSE
+        ------------------------------------------------- */
+
+        const responseText =
+            await response.text();
 
 
-        const data =
-            await response.json();
+        console.log(
+            "📥 Server response:",
+            responseText
+        );
 
+
+        /* -------------------------------------------------
+           PARSE JSON
+        ------------------------------------------------- */
+
+        let data;
+
+
+        try {
+
+            data =
+                JSON.parse(
+                    responseText
+                );
+
+        } catch (jsonError) {
+
+            console.error(
+                "❌ Invalid JSON returned by Flask:",
+                responseText
+            );
+
+            throw new Error(
+                "Server did not return valid JSON."
+            );
+
+        }
+
+
+        /* -------------------------------------------------
+           HTTP ERROR
+        ------------------------------------------------- */
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                data.message ||
+                "PDF upload failed."
+            );
+
+        }
+
+
+        /* -------------------------------------------------
+           SUCCESS
+        ------------------------------------------------- */
 
         if (data.success) {
 
-            syllabusText.value =
-                data.text;
+
+            console.log(
+                "✅ PDF extraction successful."
+            );
 
 
-            uploadStatus.innerText =
-                "✅ Syllabus extracted successfully!";
+            /* ---------------------------------------------
+               PUT EXTRACTED TEXT INTO TEXTAREA
+            --------------------------------------------- */
+
+            if (syllabusText) {
+
+                syllabusText.value =
+                    data.text || "";
+
+                syllabusText.scrollTop = 0;
+
+            }
 
 
-        } else {
+            /* ---------------------------------------------
+               STATUS
+            --------------------------------------------- */
 
-            uploadStatus.innerText =
-                "❌ " + data.message;
+            if (uploadStatus) {
+
+                uploadStatus.innerText =
+                    "✅ Syllabus extracted successfully!";
+
+            }
+
+
+            console.log(
+                "Characters extracted:",
+                (data.text || "").length
+            );
+
+
+        }
+
+
+        /* -------------------------------------------------
+           SERVER RETURNED ERROR
+        ------------------------------------------------- */
+
+        else {
+
+            const message =
+                data.error ||
+                data.message ||
+                "Could not extract syllabus.";
+
+
+            console.error(
+                "❌ Upload failed:",
+                message
+            );
+
+
+            if (uploadStatus) {
+
+                uploadStatus.innerText =
+                    "❌ " +
+                    message;
+
+            }
 
         }
 
 
     } catch (error) {
 
-        console.error(error);
 
-        uploadStatus.innerText =
-            "❌ Error uploading file. Please try again.";
+        console.error(
+            "❌ PDF Upload Error:",
+            error
+        );
+
+
+        if (uploadStatus) {
+
+            uploadStatus.innerText =
+                "❌ Error uploading PDF: " +
+                (
+                    error.message ||
+                    "Please try again."
+                );
+
+        }
 
     }
 
 }
 
 
-/* =========================================
-   GENERATE STUDY PLAN
-========================================= */
+/* =========================================================
+   GENERATE PERSONALIZED LEARNING PLAN
+========================================================= */
 
 function generatePlan() {
 
+
+    /* -----------------------------------------------------
+       GET VALUES
+    ----------------------------------------------------- */
+
     const course =
-        document.getElementById("course").value.trim();
+        getValue("course");
+
 
     const semester =
-        document.getElementById("semester").value.trim();
+        getValue("semester");
+
 
     const syllabus =
-        document.getElementById("syllabusText").value.trim();
+        getValue("syllabusText");
+
 
     const examDate =
-        document.getElementById("examDate").value;
+        getValue("examDate");
+
 
     const studyTime =
-        document.getElementById("studyTime").value;
+        getValue("studyTime");
 
 
-    /* Validation */
+    /* -----------------------------------------------------
+       VALIDATION
+    ----------------------------------------------------- */
 
-    if (syllabus === "") {
+    if (!syllabus) {
 
         alert(
             "Please type your syllabus or upload a syllabus file first!"
         );
 
         return;
-
     }
 
 
-    if (examDate === "") {
+    if (!examDate) {
 
         alert(
             "Please select your exam date!"
         );
 
         return;
-
     }
 
 
-    if (studyTime === "") {
+    if (!studyTime) {
 
         alert(
             "Please enter your daily study time!"
         );
 
         return;
-
     }
 
 
-    /* =====================================
+    /* -----------------------------------------------------
        EXTRACT TOPICS
-    ===================================== */
+    ----------------------------------------------------- */
 
-    topics = extractTopics(syllabus);
+    topics =
+        extractTopics(
+            syllabus
+        );
 
 
-    if (topics.length === 0) {
+    console.log(
+        "Extracted topics:",
+        topics
+    );
+
+
+    if (
+        !topics ||
+        topics.length === 0
+    ) {
 
         alert(
             "Could not identify topics. Please enter the syllabus clearly."
         );
 
         return;
-
     }
 
 
+    /* -----------------------------------------------------
+       RESET
+    ----------------------------------------------------- */
+
     currentTopicIndex = 0;
 
+    unlockedTopics =
+        new Set([0]);
 
-    /* =====================================
+
+    /* -----------------------------------------------------
        CALCULATE DAYS
-    ===================================== */
+    ----------------------------------------------------- */
 
     const today =
         new Date();
 
+
     const exam =
-        new Date(examDate);
+        new Date(
+            examDate +
+            "T23:59:59"
+        );
 
 
     const difference =
-        exam - today;
+        exam -
+        today;
 
 
     let daysRemaining =
         Math.ceil(
             difference /
-            (1000 * 60 * 60 * 24)
+            (
+                1000 *
+                60 *
+                60 *
+                24
+            )
         );
 
 
-    if (daysRemaining < 1) {
+    if (
+        daysRemaining < 1
+    ) {
 
         daysRemaining = 1;
 
     }
 
 
-    /* =====================================
-       CREATE PLAN SUMMARY
-    ===================================== */
+    /*
+       Never create more days
+       than number of topics.
+    */
+
+    daysRemaining =
+        Math.min(
+            daysRemaining,
+            topics.length
+        );
+
+
+    /* -----------------------------------------------------
+       PLAN SUMMARY
+    ----------------------------------------------------- */
 
     const planSummary =
-        document.getElementById("planSummary");
+        document.getElementById(
+            "planSummary"
+        );
 
 
-    planSummary.innerHTML = `
+    if (planSummary) {
 
-        <div class="plan-summary-box">
+        planSummary.innerHTML = `
 
-            <h3>🎯 Your Smart Learning Plan</h3>
-
-            <p>
-                <b>Course:</b>
-                ${course || "Not specified"}
-            </p>
-
-            <p>
-                <b>Semester:</b>
-                ${semester || "Not specified"}
-            </p>
-
-            <p>
-                <b>Topics Found:</b>
-                ${topics.length}
-            </p>
-
-            <p>
-                <b>Days Remaining:</b>
-                ${daysRemaining}
-            </p>
-
-            <p>
-                <b>Daily Study Time:</b>
-                ${studyTime} hours
-            </p>
-
-        </div>
-
-    `;
-
-
-    /* =====================================
-       CREATE DAILY PLAN
-    ===================================== */
-
-    const planOutput =
-        document.getElementById("planOutput");
-
-
-    planOutput.innerHTML = "";
-
-
-    topics.forEach(function(topic, index) {
-
-        const day =
-            Math.floor(
-                index / Math.max(
-                    1,
-                    Math.ceil(
-                        topics.length / daysRemaining
-                    )
-                )
-            ) + 1;
-
-
-        planOutput.innerHTML += `
-
-            <div
-                class="day-card"
-                onclick="selectTopic(${index})"
-                style="cursor: pointer;"
-            >
+            <div class="plan-summary-box">
 
                 <h3>
-                    📅 Day ${day}
+                    🎯 Your Personalized Learning Plan
                 </h3>
 
-                <h4>
-                    📚 ${topic}
-                </h4>
+                <p>
+                    <b>Course:</b>
+                    ${escapeHTML(
+                        course ||
+                        "Not specified"
+                    )}
+                </p>
 
-                <ul>
+                <p>
+                    <b>Semester:</b>
+                    ${escapeHTML(
+                        semester ||
+                        "Not specified"
+                    )}
+                </p>
 
-                    <li>
-                        Learn the concept carefully
-                    </li>
+                <p>
+                    <b>Topics Found:</b>
+                    ${topics.length}
+                </p>
 
-                    <li>
-                        Understand important points
-                    </li>
+                <p>
+                    <b>Study Days:</b>
+                    ${daysRemaining}
+                </p>
 
-                    <li>
-                        Explain it in your own words
-                    </li>
+                <p>
+                    <b>Daily Study Time:</b>
+                    ${escapeHTML(
+                        studyTime
+                    )}
+                    hours
+                </p>
 
-                    <li>
-                        Get 80%+ to unlock the next topic
-                    </li>
+                <div
+                    style="
+                        margin-top:15px;
+                        padding:12px;
+                        border-radius:10px;
+                        background:rgba(0,0,0,0.18);
+                    "
+                >
 
-                </ul>
+                    💡 <strong>How to use:</strong>
+
+                    Select a topic,
+                    learn it,
+                    explain it in your own words,
+                    and score <b>80%+</b>
+                    to unlock the next topic.
+
+                </div>
 
             </div>
 
         `;
 
-    });
+    }
 
 
-    /* =====================================
+    /* -----------------------------------------------------
+       CREATE PLAN
+    ----------------------------------------------------- */
+
+    const planOutput =
+        document.getElementById(
+            "planOutput"
+        );
+
+
+    if (!planOutput) {
+
+        return;
+    }
+
+
+    planOutput.innerHTML =
+        "";
+
+
+    /*
+       Maximum 5 topics per row.
+
+       Example:
+
+       Topic 1 | Topic 2 | Topic 3 | Topic 4 | Topic 5
+
+       Then next row/day.
+    */
+
+    const topicsPerDay =
+        Math.max(
+            1,
+            Math.ceil(
+                topics.length /
+                daysRemaining
+            )
+        );
+
+
+    let topicIndex =
+        0;
+
+
+    /* -----------------------------------------------------
+       CREATE DAY SECTIONS
+    ----------------------------------------------------- */
+
+    for (
+        let day = 1;
+        day <= daysRemaining;
+        day++
+    ) {
+
+
+        const dayTopics =
+            topics.slice(
+                topicIndex,
+                topicIndex +
+                topicsPerDay
+            );
+
+
+        if (
+            dayTopics.length === 0
+        ) {
+
+            break;
+
+        }
+
+
+        /* -------------------------------------------------
+           DAY CONTAINER
+        ------------------------------------------------- */
+
+        let dayHTML = `
+
+            <div
+                class="day-section"
+                style="
+                    margin-top:20px;
+                    padding:20px;
+                    border-radius:18px;
+                    background:
+                        linear-gradient(
+                            135deg,
+                            rgba(18,38,28,0.96),
+                            rgba(29,58,41,0.96)
+                        );
+                    border-left:6px solid #d4a64a;
+                    box-shadow:
+                        0 10px 25px rgba(0,0,0,0.35);
+                "
+            >
+
+                <div
+                    class="day-header"
+                    style="
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;
+                        margin-bottom:18px;
+                    "
+                >
+
+                    <div
+                        style="
+                            font-size:23px;
+                            font-weight:bold;
+                            color:#f3d27a;
+                        "
+                    >
+
+                        📅 Day ${day}
+
+                    </div>
+
+                    <div
+                        style="
+                            color:#d8d1c0;
+                            font-size:14px;
+                        "
+                    >
+
+                        ${dayTopics.length}
+                        topic${dayTopics.length > 1 ? "s" : ""}
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    class="topics-grid"
+                    style="
+                        display:grid;
+                        grid-template-columns:
+                            repeat(
+                                5,
+                                minmax(0,1fr)
+                            );
+                        gap:15px;
+                    "
+                >
+
+        `;
+
+
+        /* -------------------------------------------------
+           CREATE TOPIC CARDS
+        ------------------------------------------------- */
+
+        dayTopics.forEach(
+            function(
+                topic,
+                localIndex
+            ) {
+
+
+                const actualIndex =
+                    topicIndex +
+                    localIndex;
+
+
+                const locked =
+                    !unlockedTopics.has(actualIndex);
+
+
+                dayHTML += `
+
+                    <div
+                        id="topic-card-${actualIndex}"
+                        class="learning-topic-card"
+                        onclick="selectTopic(${actualIndex})"
+                        role="button"
+                        tabindex="0"
+                        style="
+                            position:relative;
+                            min-height:145px;
+                            padding:18px;
+                            border-radius:15px;
+                            cursor:pointer;
+
+                            background:
+                                linear-gradient(
+                                    135deg,
+                                    #14281e,
+                                    #203d2d
+                                );
+
+                            border:
+                                1px solid
+                                rgba(
+                                    212,
+                                    166,
+                                    74,
+                                    0.28
+                                );
+
+                            transition:
+                                transform 0.25s ease,
+                                box-shadow 0.25s ease,
+                                border-color 0.25s ease;
+
+                            display:flex;
+                            flex-direction:column;
+                            justify-content:space-between;
+                        "
+                        onkeydown="
+                            if(event.key === 'Enter')
+                                selectTopic(${actualIndex})
+                        "
+                    >
+
+                        <div
+                            style="
+                                display:flex;
+                                justify-content:space-between;
+                                align-items:center;
+                            "
+                        >
+
+                            <div
+                                style="
+                                    width:32px;
+                                    height:32px;
+                                    border-radius:50%;
+                                    display:flex;
+                                    align-items:center;
+                                    justify-content:center;
+
+                                    background:
+                                        rgba(
+                                            212,
+                                            166,
+                                            74,
+                                            0.18
+                                        );
+
+                                    color:#f3d27a;
+                                    font-weight:bold;
+                                "
+                            >
+
+                                ${localIndex + 1}
+
+                            </div>
+
+
+                            <div
+                                class="topic-lock-icon"
+                                style="
+                                    font-size:22px;
+                                "
+                            >
+
+                                ${
+                                    locked
+                                    ? "🔒"
+                                    : "📚"
+                                }
+
+                            </div>
+
+                        </div>
+
+
+                        <div>
+
+                            <h4
+                                style="
+                                    margin:12px 0 6px;
+                                    color:#f3d27a;
+                                    font-size:16px;
+                                    line-height:1.35;
+                                "
+                            >
+
+                                ${escapeHTML(topic)}
+
+                            </h4>
+
+
+                            <p
+                                class="topic-status"
+                                style="
+                                    margin:0;
+                                    color:#cfc8b8;
+                                    font-size:13px;
+                                "
+                            >
+
+                                ${
+                                    locked
+                                    ? "🔒 Locked"
+                                    : "Click to learn"
+                                }
+
+                            </p>
+
+                        </div>
+
+
+                        <div
+                            style="
+                                text-align:right;
+                                color:#d4a64a;
+                                font-size:20px;
+                            "
+                        >
+
+                            →
+
+                        </div>
+
+                    </div>
+
+                `;
+
+            }
+        );
+
+
+        dayHTML += `
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        planOutput.innerHTML +=
+            dayHTML;
+
+
+        topicIndex +=
+            dayTopics.length;
+
+    }
+
+
+    /* -----------------------------------------------------
+       RESPONSIVE FIX
+    ----------------------------------------------------- */
+
+    const styleId =
+        "learnmirror-grid-style";
+
+
+    if (
+        !document.getElementById(
+            styleId
+        )
+    ) {
+
+        const style =
+            document.createElement(
+                "style"
+            );
+
+
+        style.id =
+            styleId;
+
+
+        style.innerHTML = `
+
+            @media (max-width: 1100px) {
+
+                .topics-grid {
+                    grid-template-columns:
+                        repeat(3, minmax(0,1fr))
+                        !important;
+                }
+
+            }
+
+
+            @media (max-width: 700px) {
+
+                .topics-grid {
+                    grid-template-columns:
+                        repeat(2, minmax(0,1fr))
+                        !important;
+                }
+
+            }
+
+
+            @media (max-width: 450px) {
+
+                .topics-grid {
+                    grid-template-columns:
+                        1fr
+                        !important;
+                }
+
+            }
+
+
+            .learning-topic-card:hover {
+
+                transform:
+                    translateY(-5px);
+
+                border-color:
+                    rgba(
+                        243,
+                        201,
+                        105,
+                        0.75
+                    ) !important;
+
+                box-shadow:
+                    0 0 20px
+                    rgba(
+                        212,
+                        166,
+                        74,
+                        0.22
+                    );
+
+            }
+
+        `;
+
+
+        document.head.appendChild(
+            style
+        );
+
+    }
+
+
+    /* -----------------------------------------------------
+       LOG
+    ----------------------------------------------------- */
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "LEARNMIRROR AI PLAN GENERATED"
+    );
+
+    console.log(
+        "Total topics:",
+        topics.length
+    );
+
+    console.log(
+        "Study days:",
+        daysRemaining
+    );
+
+    console.log(
+        "========================================"
+    );
+
+
+    /* -----------------------------------------------------
        LOAD FIRST TOPIC
-    ===================================== */
+    ----------------------------------------------------- */
 
     selectTopic(0);
 
 
-    /* Scroll */
+    /* -----------------------------------------------------
+       SCROLL TO PLAN
+    ----------------------------------------------------- */
 
-    planSummary.scrollIntoView({
+    if (planSummary) {
 
-        behavior: "smooth",
+        planSummary.scrollIntoView({
 
-        block: "start"
+            behavior:
+                "smooth",
 
-    });
+            block:
+                "start"
+
+        });
+
+    }
 
 }
 
 
-/* =========================================
-   EXTRACT TOPICS FROM SYLLABUS
-========================================= */
+/* =========================================================
+   EXTRACT TOPICS
+========================================================= */
 
-function extractTopics(syllabus) {
+function extractTopics(
+    syllabus
+) {
+
+
+    const extractedTopics =
+        [];
+
+
+    if (
+        !syllabus ||
+        !syllabus.trim()
+    ) {
+
+        return extractedTopics;
+
+    }
+
+
+    /* -----------------------------------------------------
+       NORMALIZE TEXT
+    ----------------------------------------------------- */
+
+    let text =
+        syllabus
+            .replace(
+                /\r/g,
+                ""
+            )
+            .replace(
+                /[•●▪◦]/g,
+                "\n"
+            )
+            .replace(
+                /\t/g,
+                " "
+            )
+            .trim();
+
+
+    /* -----------------------------------------------------
+       NORMALIZE COMMON PDF SEPARATORS
+    ----------------------------------------------------- */
+
+    text =
+        text.replace(
+            /,\s*(?=[A-Z][A-Za-z0-9])/g,
+            "\n"
+        );
+
+
+    text =
+        text.replace(
+            /;\s*/g,
+            "\n"
+        );
+
+
+    text =
+        text.replace(
+            /\s+(?=\d+[\.)]\s+)/g,
+            "\n"
+        );
+
+
+    /* -----------------------------------------------------
+       SPLIT LINES
+    ----------------------------------------------------- */
 
     const lines =
-        syllabus
+        text
             .split("\n")
-            .map(function(line) {
-
-                return line.trim();
-
-            })
-            .filter(function(line) {
-
-                return line.length > 0;
-
-            });
+            .map(
+                line =>
+                    line.trim()
+            )
+            .filter(
+                line =>
+                    line.length > 0
+            );
 
 
-    const extractedTopics = [];
+    /* -----------------------------------------------------
+       PROCESS EACH LINE
+    ----------------------------------------------------- */
+
+    lines.forEach(
+        function(line) {
 
 
-    lines.forEach(function(line) {
-
-        const lowerLine =
-            line.toLowerCase();
+            let topic =
+                line.trim();
 
 
-        /* Skip UNIT headings */
+            /* ---------------------------------------------
+               REMOVE NUMBERING
+            --------------------------------------------- */
 
-        if (
-            lowerLine.startsWith("unit ") ||
-            lowerLine.startsWith("chapter ") ||
-            lowerLine.startsWith("module ")
-        ) {
+            topic =
+                topic.replace(
+                    /^\s*\d+[\.\)\-:]\s*/,
+                    ""
+                );
 
-            return;
+
+            /* ---------------------------------------------
+               REMOVE BULLETS
+            --------------------------------------------- */
+
+            topic =
+                topic.replace(
+                    /^\s*[-–—]\s*/,
+                    ""
+                );
+
+
+            topic =
+                topic.trim();
+
+
+            if (!topic) {
+
+                return;
+
+            }
+
+
+            const lower =
+                topic.toLowerCase();
+
+
+            /* ---------------------------------------------
+               SKIP COMMON HEADINGS
+            --------------------------------------------- */
+
+            const headings = [
+
+                "syllabus",
+
+                "course contents",
+
+                "contents",
+
+                "table of contents",
+
+                "course objectives",
+
+                "objectives",
+
+                "text books",
+
+                "textbooks",
+
+                "reference books",
+
+                "references",
+
+                "unit",
+
+                "units",
+
+                "module",
+
+                "modules",
+
+                "chapter",
+
+                "chapters"
+
+            ];
+
+
+            if (
+                headings.includes(
+                    lower
+                )
+            ) {
+
+                return;
+
+            }
+
+
+            /* ---------------------------------------------
+               SKIP UNIT / MODULE / CHAPTER HEADINGS
+            --------------------------------------------- */
+
+            if (
+
+                /^unit\s*(\d+|[ivxlcdm]+)/i
+                    .test(topic)
+
+                ||
+
+                /^chapter\s*(\d+|[ivxlcdm]+)/i
+                    .test(topic)
+
+                ||
+
+                /^module\s*(\d+|[ivxlcdm]+)/i
+                    .test(topic)
+
+            ) {
+
+                return;
+
+            }
+
+
+            /* ---------------------------------------------
+               SKIP PAGE NUMBERS
+            --------------------------------------------- */
+
+            if (
+
+                /^page\s+\d+/i
+                    .test(topic)
+
+                ||
+
+                /^page\s*[-:]?\s*\d+/i
+                    .test(topic)
+
+            ) {
+
+                return;
+
+            }
+
+
+            /* ---------------------------------------------
+               SKIP VERY LONG PARAGRAPHS
+            --------------------------------------------- */
+
+            if (
+                topic.length > 160
+            ) {
+
+                return;
+
+            }
+
+
+            /* ---------------------------------------------
+               REMOVE TRAILING PUNCTUATION
+            --------------------------------------------- */
+
+            topic =
+                topic
+                    .replace(
+                        /[,:;]+$/,
+                        ""
+                    )
+                    .trim();
+
+
+            /* ---------------------------------------------
+               VALID TOPIC
+            --------------------------------------------- */
+
+            if (
+                topic.length > 2
+            ) {
+
+                extractedTopics.push(
+                    topic
+                );
+
+            }
 
         }
+    );
 
 
-        /* Remove numbering */
-
-        const cleanTopic =
-            line.replace(
-                /^[0-9]+[.)\-\s]+/,
-                ""
-            ).trim();
-
-
-        if (
-            cleanTopic.length > 2 &&
-            cleanTopic.length < 120
-        ) {
-
-            extractedTopics.push(cleanTopic);
-
-        }
-
-    });
-
-
-    /* Remove duplicates */
+    /* -----------------------------------------------------
+       REMOVE DUPLICATES
+    ----------------------------------------------------- */
 
     return [
-        ...new Set(extractedTopics)
+        ...new Set(
+            extractedTopics
+        )
     ];
 
 }
 
 
-/* =========================================
+/* =========================================================
    SELECT TOPIC
-========================================= */
+========================================================= */
 
-function selectTopic(index) {
+function selectTopic(
+    index
+) {
+
 
     if (
         index < 0 ||
@@ -433,92 +1413,790 @@ function selectTopic(index) {
     }
 
 
-    currentTopicIndex = index;
+    /* -----------------------------------------------------
+       CHECK LOCK
+    ----------------------------------------------------- */
+
+    if (
+        index !== 0 &&
+        !unlockedTopics.has(index)
+    ) {
+
+        alert(
+            "🔒 This topic is locked.\n\nScore 80% or above on the previous topic to unlock it."
+        );
+
+        return;
+
+    }
+
+
+    currentTopicIndex =
+        index;
 
 
     const topic =
-        topics[currentTopicIndex];
+        topics[
+            currentTopicIndex
+        ];
 
+
+    /* -----------------------------------------------------
+       HIGHLIGHT SELECTED CARD
+    ----------------------------------------------------- */
+
+    document
+        .querySelectorAll(
+            ".learning-topic-card"
+        )
+        .forEach(
+            card => {
+
+                card.style.boxShadow =
+                    "";
+
+                card.style.borderColor =
+                    "rgba(212,166,74,0.28)";
+
+            }
+        );
+
+
+    const selectedCard =
+        document.getElementById(
+            "topic-card-" +
+            index
+        );
+
+
+    if (selectedCard) {
+
+        selectedCard.style.boxShadow =
+            "0 0 25px rgba(243,201,105,0.35)";
+
+        selectedCard.style.borderColor =
+            "#f3c969";
+
+    }
+
+
+    /* -----------------------------------------------------
+       LEARN CONTENT
+    ----------------------------------------------------- */
 
     const learnContent =
-        document.getElementById("learnContent");
+        document.getElementById(
+            "learnContent"
+        );
 
 
-    learnContent.innerHTML = `
+    if (learnContent) {
 
-        <h3>
-            📚 ${topic}
-        </h3>
+        learnContent.innerHTML = `
 
-        <p>
+            <h3>
 
-            Study this topic carefully.
+                📚
+                ${escapeHTML(topic)}
 
-            Understand the main concepts,
-            important definitions, differences,
-            features and applications.
+            </h3>
 
-        </p>
 
-        <br>
+            <p>
 
-        <p>
+                Study this topic carefully.
 
-            💡 After learning, explain this topic
-            in your own words using the
-            <b>Teach Back</b> section.
+                Understand the main concepts,
+                important definitions,
+                differences,
+                features and applications.
 
-        </p>
+            </p>
 
-        <br>
 
-        <p>
+            <br>
 
-            🎯 Score <b>80% or above</b>
-            to unlock the next topic.
 
-        </p>
+            <p>
+
+                💡 After learning,
+                explain this topic in your own words
+                using the <b>Teach Back</b> section.
+
+            </p>
+
+
+            <br>
+
+
+            <p>
+
+                🎯 Score
+                <b>80% or above</b>
+                to unlock the next topic.
+
+            </p>
+
+        `;
+
+    }
+
+
+    /* -----------------------------------------------------
+       CLEAR EXPLANATION
+    ----------------------------------------------------- */
+
+    const explanation =
+        document.getElementById(
+            "explanation"
+        );
+
+
+    if (explanation) {
+
+        explanation.value =
+            "";
+
+    }
+
+
+    /* -----------------------------------------------------
+       RESET REPORT
+    ----------------------------------------------------- */
+
+    const report =
+        document.getElementById(
+            "report"
+        );
+
+
+    if (report) {
+
+        report.innerHTML = `
+
+            <div class="report-placeholder">
+
+                <p>
+
+                    Explain the topic and click
+                    "Evaluate My Understanding".
+
+                </p>
+
+            </div>
+
+        `;
+
+    }
+
+
+    /* -----------------------------------------------------
+       LOAD RESOURCES
+    ----------------------------------------------------- */
+
+    loadLearningResources(
+        topic
+    );
+
+
+    /* -----------------------------------------------------
+       RESET AI TUTOR
+    ----------------------------------------------------- */
+
+    const tutorChat =
+        document.getElementById(
+            "tutorChat"
+        );
+
+
+    const tutorQuestion =
+        document.getElementById(
+            "tutorQuestion"
+        );
+
+
+    if (tutorChat) {
+
+        tutorChat.innerHTML = `
+
+            <div
+                class="tutor-message tutor-ai"
+            >
+
+                👋 Hi! I'm your AI Tutor.
+
+                <br><br>
+
+                Ask me anything about
+                <b>
+                    ${escapeHTML(topic)}
+                </b>.
+
+            </div>
+
+        `;
+
+    }
+
+
+    if (tutorQuestion) {
+
+        tutorQuestion.value =
+            "";
+
+    }
+
+
+    /* -----------------------------------------------------
+       SCROLL
+    ----------------------------------------------------- */
+
+    if (learnContent) {
+
+        learnContent.scrollIntoView({
+
+            behavior:
+                "smooth",
+
+            block:
+                "center"
+
+        });
+
+    }
+
+}
+
+
+/* =========================================================
+   LEARNING RESOURCES
+========================================================= */
+
+function loadLearningResources(
+    topic
+) {
+
+
+    const resources =
+        document.getElementById(
+            "learningResources"
+        );
+
+
+    if (!resources) {
+
+        return;
+
+    }
+
+
+    const searchQuery =
+        encodeURIComponent(
+            topic
+        );
+
+
+    resources.innerHTML = `
+
+        <div class="resources-box">
+
+            <h3>
+
+                🎥 Learning Resources
+
+            </h3>
+
+
+            <p class="small-text">
+
+                Recommended resources for:
+
+                <b>
+                    ${escapeHTML(topic)}
+                </b>
+
+            </p>
+
+
+            <div class="resource-grid">
+
+
+                <!-- VIDEO -->
+
+                <div class="resource-card">
+
+                    <div class="resource-icon">
+                        🎥
+                    </div>
+
+
+                    <h4>
+                        Video Lessons
+                    </h4>
+
+
+                    <p>
+
+                        Find video explanations
+                        for this topic.
+
+                    </p>
+
+
+                    <a
+                        href="https://www.youtube.com/results?search_query=${searchQuery}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+
+                        Watch Videos ↗
+
+                    </a>
+
+                </div>
+
+
+                <!-- REFERENCES -->
+
+                <div class="resource-card">
+
+                    <div class="resource-icon">
+                        📖
+                    </div>
+
+
+                    <h4>
+                        Study References
+                    </h4>
+
+
+                    <p>
+
+                        Explore additional
+                        explanations and notes.
+
+                    </p>
+
+
+                    <a
+                        href="https://www.google.com/search?q=${searchQuery}+study+notes"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+
+                        Find Notes ↗
+
+                    </a>
+
+                </div>
+
+
+                <!-- PRACTICE -->
+
+                <div class="resource-card">
+
+                    <div class="resource-icon">
+                        💻
+                    </div>
+
+
+                    <h4>
+                        Practice
+                    </h4>
+
+
+                    <p>
+
+                        Search for questions
+                        and practice problems.
+
+                    </p>
+
+
+                    <a
+                        href="https://www.google.com/search?q=${searchQuery}+practice+questions"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+
+                        Practice Now ↗
+
+                    </a>
+
+                </div>
+
+
+            </div>
+
+        </div>
 
     `;
 
-
-    /* Clear old explanation */
-
-    document.getElementById("explanation").value = "";
+}
 
 
-    /* Reset report */
+/* =========================================================
+   AI TUTOR
+========================================================= */
 
-    document.getElementById("report").innerHTML = `
+async function askAITutor() {
 
-        <div class="report-placeholder">
 
-            <p>
-                Explain the topic and click
-                "Evaluate My Understanding".
-            </p>
+    const questionInput =
+        document.getElementById(
+            "tutorQuestion"
+        );
+
+
+    const chat =
+        document.getElementById(
+            "tutorChat"
+        );
+
+
+    if (
+        !questionInput ||
+        !chat
+    ) {
+
+        return;
+
+    }
+
+
+    const question =
+        questionInput.value.trim();
+
+
+    if (!question) {
+
+        return;
+
+    }
+
+
+    if (
+        topics.length === 0 ||
+        !topics[currentTopicIndex]
+    ) {
+
+        alert(
+            "Please select a topic first."
+        );
+
+        return;
+
+    }
+
+
+    const topic =
+        topics[
+            currentTopicIndex
+        ];
+
+
+    /* -----------------------------------------------------
+       SHOW USER MESSAGE
+    ----------------------------------------------------- */
+
+    chat.innerHTML += `
+
+        <div
+            class="tutor-message tutor-user"
+        >
+
+            🧑‍🎓
+            ${escapeHTML(question)}
 
         </div>
 
     `;
 
 
-    learnContent.scrollIntoView({
+    questionInput.value =
+        "";
 
-        behavior: "smooth",
 
-        block: "center"
+    /* -----------------------------------------------------
+       LOADING
+    ----------------------------------------------------- */
 
-    });
+    const loadingId =
+        "tutor-loading-" +
+        Date.now();
+
+
+    chat.innerHTML += `
+
+        <div
+            class="tutor-message tutor-ai"
+            id="${loadingId}"
+        >
+
+            🤔 Thinking...
+
+        </div>
+
+    `;
+
+
+    chat.scrollTop =
+        chat.scrollHeight;
+
+
+    /* -----------------------------------------------------
+       REQUEST
+    ----------------------------------------------------- */
+
+    try {
+
+
+        const response =
+            await fetch(
+                "/ask_tutor",
+                {
+                    method:
+                        "POST",
+
+                    headers:
+                        {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                    body:
+                        JSON.stringify({
+
+                            topic:
+                                topic,
+
+                            question:
+                                question
+
+                        })
+
+                }
+            );
+
+
+        const responseText =
+            await response.text();
+
+
+        let data;
+
+
+        try {
+
+            data =
+                JSON.parse(
+                    responseText
+                );
+
+        } catch {
+
+            throw new Error(
+                "Invalid server response."
+            );
+
+        }
+
+
+        const loading =
+            document.getElementById(
+                loadingId
+            );
+
+
+        /* -------------------------------------------------
+           SUCCESS
+        ------------------------------------------------- */
+
+        if (
+            response.ok &&
+            data.success
+        ) {
+
+            if (loading) {
+
+                loading.innerHTML =
+                    "🤖 " +
+                    formatTutorAnswer(
+                        data.answer ||
+                        ""
+                    );
+
+            }
+
+        }
+
+
+        /* -------------------------------------------------
+           ERROR
+        ------------------------------------------------- */
+
+        else {
+
+            if (loading) {
+
+                loading.innerHTML =
+                    "❌ " +
+                    escapeHTML(
+                        data.error ||
+                        data.message ||
+                        "Something went wrong."
+                    );
+
+            }
+
+        }
+
+
+    } catch (error) {
+
+
+        console.error(
+            "AI Tutor Error:",
+            error
+        );
+
+
+        const loading =
+            document.getElementById(
+                loadingId
+            );
+
+
+        if (loading) {
+
+            loading.innerHTML =
+                "❌ Unable to connect to AI Tutor. Make sure Ollama and Flask are running.";
+
+        }
+
+    }
+
+
+    chat.scrollTop =
+        chat.scrollHeight;
+
+}
+/* =========================================================
+   PDF FILE SELECTION
+========================================================= */
+
+function handlePDFSelection(input) {
+
+    const fileName = document.getElementById("fileName");
+    const uploadStatus = document.getElementById("uploadStatus");
+
+    if (!input || !input.files || input.files.length === 0) {
+
+        if (fileName) {
+            fileName.innerText = "No PDF selected";
+        }
+
+        if (uploadStatus) {
+            uploadStatus.innerText = "";
+        }
+
+        return;
+    }
+
+    const file = input.files[0];
+
+    console.log("📄 PDF selected:", file.name);
+    console.log("📦 PDF size:", file.size, "bytes");
+    console.log("📋 PDF type:", file.type);
+
+    const isPDF =
+        file.type === "application/pdf" ||
+        file.name.toLowerCase().endsWith(".pdf");
+
+    if (!isPDF) {
+
+        alert("❌ Please select a PDF file.");
+
+        input.value = "";
+
+        if (fileName) {
+            fileName.innerText = "No PDF selected";
+        }
+
+        if (uploadStatus) {
+
+            uploadStatus.innerText = "";
+        }
+
+        return;
+    }
+
+    /* Show selected file */
+
+    if (fileName) {
+        fileName.innerText =
+            "📄 Selected: " + file.name;
+    }
+
+    /* Show status */
+
+    if (uploadStatus) {
+        uploadStatus.innerText =
+            "✅ PDF selected. Click Upload & Extract PDF.";
+    }
+}
+
+
+/* =========================================================
+   ESCAPE HTML
+========================================================= */
+
+function escapeHTML(
+    text
+) {
+
+
+    const div =
+        document.createElement(
+            "div"
+        );
+
+
+    div.textContent =
+        String(
+            text ?? ""
+        );
+
+
+    return div.innerHTML;
 
 }
 
 
-/* =========================================
+/* =========================================================
+   FORMAT AI ANSWER
+========================================================= */
+
+function formatTutorAnswer(
+    text
+) {
+
+    return escapeHTML(
+        text
+    ).replace(
+        /\n/g,
+        "<br>"
+    );
+
+}
+
+
+/* =========================================================
    START VOICE RECOGNITION
-========================================= */
+========================================================= */
 
 function startVoiceRecognition() {
+
 
     const SpeechRecognition =
         window.SpeechRecognition ||
@@ -536,8 +2214,6 @@ function startVoiceRecognition() {
     }
 
 
-    /* If already recording */
-
     if (isRecording) {
 
         return;
@@ -549,57 +2225,82 @@ function startVoiceRecognition() {
         new SpeechRecognition();
 
 
-    /* IMPORTANT SETTINGS */
-
-    recognition.continuous = true;
-
-    recognition.interimResults = true;
-
-    recognition.lang = "en-IN";
+    recognition.continuous =
+        true;
 
 
-    isRecording = true;
+    recognition.interimResults =
+        true;
+
+
+    recognition.lang =
+        "en-IN";
+
+
+    isRecording =
+        true;
 
 
     const explanation =
-        document.getElementById("explanation");
+        document.getElementById(
+            "explanation"
+        );
+
 
     const voiceStatus =
-        document.getElementById("voiceStatus");
+        document.getElementById(
+            "voiceStatus"
+        );
 
 
-    voiceStatus.innerText =
-        "🔴 Listening... Speak freely. You can pause between sentences.";
+    if (voiceStatus) {
+
+        voiceStatus.innerText =
+            "🔴 Listening... Speak freely.";
+
+    }
 
 
-    /* =====================================
-       VOICE RESULT
-    ===================================== */
+    /* -----------------------------------------------------
+       SPEECH RESULT
+    ----------------------------------------------------- */
 
     recognition.onresult =
         function(event) {
 
-            let finalTranscript = "";
 
-            let interimTranscript = "";
+            let finalTranscript =
+                "";
+
+
+            let interimTranscript =
+                "";
 
 
             for (
-                let i = event.resultIndex;
-                i < event.results.length;
+                let i =
+                    event.resultIndex;
+
+                i <
+                    event.results.length;
+
                 i++
             ) {
 
+
                 const transcript =
-                    event.results[i][0].transcript;
+                    event.results[i][0]
+                        .transcript;
 
 
                 if (
-                    event.results[i].isFinal
+                    event.results[i]
+                        .isFinal
                 ) {
 
                     finalTranscript +=
-                        transcript + " ";
+                        transcript +
+                        " ";
 
                 }
 
@@ -613,42 +2314,62 @@ function startVoiceRecognition() {
             }
 
 
-            /* Add final voice text */
+            /* ---------------------------------------------
+               ADD FINAL SPEECH
+            --------------------------------------------- */
 
-            if (finalTranscript !== "") {
+            if (
+                finalTranscript !== "" &&
+                explanation
+            ) {
 
                 explanation.value +=
-                    finalTranscript;
+                    (
+                        explanation.value
+                            ? " "
+                            : ""
+                    ) +
+                    finalTranscript.trim();
 
             }
 
 
-            /* Show current speech */
+            /* ---------------------------------------------
+               INTERIM TEXT
+            --------------------------------------------- */
 
-            if (interimTranscript !== "") {
+            if (voiceStatus) {
 
-                voiceStatus.innerText =
-                    "🔴 Listening: " +
-                    interimTranscript;
 
-            }
+                if (
+                    interimTranscript
+                ) {
 
-            else {
+                    voiceStatus.innerText =
+                        "🔴 Listening: " +
+                        interimTranscript;
 
-                voiceStatus.innerText =
-                    "🔴 Listening...";
+                }
+
+                else {
+
+                    voiceStatus.innerText =
+                        "🔴 Listening...";
+
+                }
 
             }
 
         };
 
 
-    /* =====================================
-       ERROR HANDLING
-    ===================================== */
+    /* -----------------------------------------------------
+       ERROR
+    ----------------------------------------------------- */
 
     recognition.onerror =
         function(event) {
+
 
             console.log(
                 "Speech recognition error:",
@@ -657,44 +2378,43 @@ function startVoiceRecognition() {
 
 
             if (
-                event.error === "not-allowed" ||
-                event.error === "service-not-allowed"
+                event.error ===
+                    "not-allowed" ||
+
+                event.error ===
+                    "service-not-allowed"
             ) {
 
-                isRecording = false;
+                isRecording =
+                    false;
 
 
-                voiceStatus.innerText =
-                    "❌ Microphone permission denied.";
+                if (voiceStatus) {
 
-            }
+                    voiceStatus.innerText =
+                        "❌ Microphone permission denied.";
 
-
-            if (
-                event.error === "no-speech"
-            ) {
-
-                console.log(
-                    "No speech detected. Restarting..."
-                );
+                }
 
             }
 
         };
 
 
-    /* =====================================
+    /* -----------------------------------------------------
        AUTO RESTART
-       IMPORTANT FOR PAUSES
-    ===================================== */
+    ----------------------------------------------------- */
 
     recognition.onend =
         function() {
 
+
             if (isRecording) {
+
 
                 setTimeout(
                     function() {
+
 
                         try {
 
@@ -704,7 +2424,9 @@ function startVoiceRecognition() {
 
                         catch (error) {
 
-                            console.log(error);
+                            console.log(
+                                error
+                            );
 
                         }
 
@@ -717,7 +2439,9 @@ function startVoiceRecognition() {
         };
 
 
-    /* Start recognition */
+    /* -----------------------------------------------------
+       START
+    ----------------------------------------------------- */
 
     try {
 
@@ -727,23 +2451,28 @@ function startVoiceRecognition() {
 
     catch (error) {
 
-        console.log(error);
+        console.log(
+            error
+        );
 
     }
 
 }
 
 
-/* =========================================
+/* =========================================================
    STOP VOICE RECOGNITION
-========================================= */
+========================================================= */
 
 function stopVoiceRecognition() {
 
-    isRecording = false;
+
+    isRecording =
+        false;
 
 
     if (recognition) {
+
 
         try {
 
@@ -753,41 +2482,69 @@ function stopVoiceRecognition() {
 
         catch (error) {
 
-            console.log(error);
+            console.log(
+                error
+            );
 
         }
 
     }
 
 
-    document.getElementById("voiceStatus").innerText =
-        "✅ Speaking stopped. Your explanation is ready for evaluation.";
+    const voiceStatus =
+        document.getElementById(
+            "voiceStatus"
+        );
+
+
+    if (voiceStatus) {
+
+        voiceStatus.innerText =
+            "✅ Speaking stopped. Your explanation is ready for evaluation.";
+
+    }
 
 }
 
 
-/* =========================================
+/* =========================================================
    EVALUATE EXPLANATION
-========================================= */
+========================================================= */
 
-function evaluateExplanation() {
+async function evaluateExplanation() {
 
-    const explanation =
-        document
-            .getElementById("explanation")
-            .value
-            .trim();
+
+    const explanationElement =
+        document.getElementById(
+            "explanation"
+        );
 
 
     const report =
-        document.getElementById("report");
+        document.getElementById(
+            "report"
+        );
 
 
-    /* =====================================
-       VALIDATION
-    ===================================== */
+    if (
+        !explanationElement ||
+        !report
+    ) {
 
-    if (explanation === "") {
+        return;
+
+    }
+
+
+    const explanation =
+        explanationElement.value.trim();
+
+
+    /* -----------------------------------------------------
+       EMPTY
+    ----------------------------------------------------- */
+
+    if (!explanation) {
 
         alert(
             "Please explain the topic first!"
@@ -798,364 +2555,456 @@ function evaluateExplanation() {
     }
 
 
-    /* =====================================
+    /* -----------------------------------------------------
+       TOPIC CHECK
+    ----------------------------------------------------- */
+
+    if (
+        topics.length === 0 ||
+        !topics[currentTopicIndex]
+    ) {
+
+        alert(
+            "Please select a topic first."
+        );
+
+        return;
+
+    }
+
+
+    const topic =
+        topics[
+            currentTopicIndex
+        ];
+
+
+    /* -----------------------------------------------------
        WORD COUNT
-    ===================================== */
+    ----------------------------------------------------- */
 
     const words =
         explanation
             .split(/\s+/)
-            .filter(function(word) {
-
-                return word.length > 0;
-
-            });
+            .filter(
+                word =>
+                    word.length > 0
+            );
 
 
     const wordCount =
         words.length;
 
 
-    /* =====================================
-       CURRENT TOPIC
-    ===================================== */
-
-    let topic =
-        "Current Topic";
-
+    /* -----------------------------------------------------
+       VERY SHORT ANSWER
+    ----------------------------------------------------- */
 
     if (
-        topics.length > 0 &&
-        topics[currentTopicIndex]
+        wordCount < 5
     ) {
 
-        topic =
-            topics[currentTopicIndex];
 
-    }
+        showReport({
 
+            topic:
+                topic,
 
-    const text =
-        explanation.toLowerCase();
+            wordCount:
+                wordCount,
 
+            concept_accuracy:
+                0,
 
-    /* =====================================
-       KEYWORDS
-    ===================================== */
+            recall:
+                0,
 
-    const conceptKeywords = [
+            application:
+                0,
 
-        "definition",
+            explanation_depth:
+                0,
 
-        "concept",
+            overall_score:
+                0,
 
-        "meaning",
+            feedback:
+                "Your explanation is too short to demonstrate understanding. Please explain the concept using definitions, key points, examples, and applications.",
 
-        "difference",
-
-        "feature",
-
-        "function",
-
-        "programming",
-
-        "language",
-
-        "important",
-
-        "process",
-
-        "system"
-
-    ];
-
-
-    const recallKeywords = [
-
-        "example",
-
-        "first",
-
-        "second",
-
-        "also",
-
-        "another",
-
-        "uses",
-
-        "used",
-
-        "called",
-
-        "such as",
-
-        "includes"
-
-    ];
-
-
-    const applicationKeywords = [
-
-        "application",
-
-        "real world",
-
-        "used for",
-
-        "software",
-
-        "development",
-
-        "system",
-
-        "program",
-
-        "website",
-
-        "example",
-
-        "practical"
-
-    ];
-
-
-    const depthKeywords = [
-
-        "because",
-
-        "therefore",
-
-        "whereas",
-
-        "however",
-
-        "for example",
-
-        "in addition",
-
-        "main difference",
-
-        "advantage",
-
-        "disadvantage",
-
-        "important"
-
-    ];
-
-
-    /* =====================================
-       COUNT KEYWORDS
-    ===================================== */
-
-    function countMatches(keywords) {
-
-        let count = 0;
-
-
-        keywords.forEach(function(keyword) {
-
-            if (
-                text.includes(keyword)
-            ) {
-
-                count++;
-
-            }
+            unlock:
+                false
 
         });
 
 
-        return count;
+        return;
 
     }
 
 
-    const conceptMatches =
-        countMatches(conceptKeywords);
+    /* -----------------------------------------------------
+       LOADING
+    ----------------------------------------------------- */
 
-    const recallMatches =
-        countMatches(recallKeywords);
+    report.innerHTML = `
 
-    const applicationMatches =
-        countMatches(applicationKeywords);
+        <div class="report-placeholder">
 
-    const depthMatches =
-        countMatches(depthKeywords);
+            <p>
 
+                🧠 AI is evaluating
+                your explanation...
 
-    /* =====================================
-       IMPROVED SCORING SYSTEM
-    ===================================== */
+            </p>
 
 
-    let conceptAccuracy = 45;
+            <p>
 
-    let recall = 45;
+                Please wait.
 
-    let application = 40;
+            </p>
 
-    let explanationDepth = 40;
+        </div>
+
+    `;
 
 
-    /* WORD COUNT BONUS */
+    /* -----------------------------------------------------
+       SEND TO FLASK
+    ----------------------------------------------------- */
+
+    try {
 
 
-    if (wordCount >= 20) {
+        const response =
+            await fetch(
+                "/evaluate_understanding",
+                {
 
-        conceptAccuracy += 5;
+                    method:
+                        "POST",
 
-        recall += 5;
+                    headers:
+                        {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                    body:
+                        JSON.stringify({
+
+                            topic:
+                                topic,
+
+                            explanation:
+                                explanation
+
+                        })
+
+                }
+            );
+
+
+        const responseText =
+            await response.text();
+
+
+        let data;
+
+
+        try {
+
+            data =
+                JSON.parse(
+                    responseText
+                );
+
+        }
+
+        catch {
+
+            throw new Error(
+                "Invalid response from evaluation server."
+            );
+
+        }
+
+
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+
+            throw new Error(
+
+                data.error ||
+                data.message ||
+                "Evaluation failed."
+
+            );
+
+        }
+
+        /* -------------------------------------------------
+   CHECK TOPIC RELEVANCE
+------------------------------------------------- */
+
+if (
+    data.relevant === false ||
+    data.report_available === false
+) {
+
+    report.innerHTML = `
+
+        <div class="report-feedback">
+
+            <h3>
+                ⚠️ Answer Not Related
+            </h3>
+
+            <p>
+                ${escapeHTML(
+                    data.error ||
+                    data.message ||
+                    "Your answer is not related to the selected topic."
+                )}
+            </p>
+
+            <p>
+                🎯 Please explain the selected topic
+                in your own words and try again.
+            </p>
+
+        </div>
+
+    `;
+
+    return;
+
+}
+
+
+        /* -------------------------------------------------
+           SHOW REPORT
+        ------------------------------------------------- */
+
+        showReport({
+
+            topic:
+                topic,
+
+            wordCount:
+                wordCount,
+
+            concept_accuracy:
+                safeScore(
+                    data.concept_accuracy
+                ),
+
+            recall:
+                safeScore(
+                    data.recall
+                ),
+
+            application:
+                safeScore(
+                    data.application
+                ),
+
+            explanation_depth:
+                safeScore(
+                    data.explanation_depth
+                ),
+
+            /*
+               IMPORTANT:
+
+               Use Flask's weighted final score.
+               Do NOT average the four displayed
+               values here.
+            */
+
+            overall_score:
+                safeScore(
+                    data.overall_score
+                ),
+
+            feedback:
+                data.feedback ||
+                "Keep improving your explanation.",
+
+            unlock:
+                Boolean(
+                    data.unlock
+                )
+
+        });
+
 
     }
 
-
-    if (wordCount >= 40) {
-
-        conceptAccuracy += 5;
-
-        explanationDepth += 10;
-
-    }
+    catch (error) {
 
 
-    if (wordCount >= 60) {
-
-        recall += 8;
-
-        explanationDepth += 10;
-
-    }
-
-
-    /* 100 WORDS = GOOD EXPLANATION */
-
-
-    if (wordCount >= 80) {
-
-        conceptAccuracy += 8;
-
-        recall += 8;
-
-        application += 8;
-
-        explanationDepth += 10;
-
-    }
-
-
-    if (wordCount >= 100) {
-
-        conceptAccuracy += 10;
-
-        recall += 10;
-
-        application += 10;
-
-        explanationDepth += 15;
-
-    }
-
-
-    if (wordCount >= 150) {
-
-        conceptAccuracy += 5;
-
-        recall += 5;
-
-        application += 8;
-
-        explanationDepth += 8;
-
-    }
-
-
-    if (wordCount >= 200) {
-
-        explanationDepth += 5;
-
-    }
-
-
-    /* KEYWORD BONUS */
-
-
-    conceptAccuracy +=
-        conceptMatches * 3;
-
-
-    recall +=
-        recallMatches * 3;
-
-
-    application +=
-        applicationMatches * 4;
-
-
-    explanationDepth +=
-        depthMatches * 3;
-
-
-    /* =====================================
-       LIMIT SCORES
-    ===================================== */
-
-    conceptAccuracy =
-        Math.min(
-            Math.round(conceptAccuracy),
-            100
+        console.error(
+            "Evaluation Error:",
+            error
         );
 
 
-    recall =
-        Math.min(
-            Math.round(recall),
-            100
+        report.innerHTML = `
+
+            <div
+                class="report-feedback"
+            >
+
+                <h3>
+                    ❌ Evaluation Error
+                </h3>
+
+
+                <p>
+
+                    ${escapeHTML(
+                        error.message ||
+                        "Unable to evaluate your explanation."
+                    )}
+
+                </p>
+
+
+                <p>
+
+                    Make sure Flask and Ollama
+                    are running, and that the
+                    <b>llama3.2</b> model is installed.
+
+                </p>
+
+            </div>
+
+        `;
+
+    }
+
+}
+
+
+/* =========================================================
+   DISPLAY UNDERSTANDING REPORT
+========================================================= */
+
+function showReport(
+    result
+) {
+
+
+    const report =
+        document.getElementById(
+            "report"
         );
 
 
-    application =
-        Math.min(
-            Math.round(application),
-            100
+    if (!report) {
+
+        return;
+
+    }
+
+
+    const conceptAccuracy =
+        safeScore(
+            result.concept_accuracy
         );
 
 
-    explanationDepth =
-        Math.min(
-            Math.round(explanationDepth),
-            100
+    const recall =
+        safeScore(
+            result.recall
         );
 
 
-    /* =====================================
-       OVERALL SCORE
-    ===================================== */
-
-    const score =
-        Math.round(
-
-            (
-                conceptAccuracy +
-                recall +
-                application +
-                explanationDepth
-            ) / 4
-
+    const application =
+        safeScore(
+            result.application
         );
 
 
-    /* =====================================
+    const explanationDepth =
+        safeScore(
+            result.explanation_depth
+        );
+
+
+    /*
+       IMPORTANT:
+
+       Use the weighted overall score
+       returned by Flask.
+
+       Flask uses:
+       Concept = 50%
+       Recall = 30%
+       Explanation = 20%
+
+       Application = bonus/supporting factor.
+    */
+
+    let score =
+        safeScore(
+            result.overall_score
+        );
+
+
+    /*
+       Fallback only if no overall score
+       was supplied.
+    */
+
+    if (
+        result.overall_score ===
+            undefined ||
+        result.overall_score ===
+            null
+    ) {
+
+        score =
+            Math.round(
+                (
+                    conceptAccuracy * 0.50
+                ) +
+
+                (
+                    recall * 0.30
+                ) +
+
+                (
+                    explanationDepth * 0.20
+                )
+            );
+
+    }
+
+
+    const topic =
+        result.topic ||
+        "Current Topic";
+
+
+    const wordCount =
+        Number(
+            result.wordCount
+        ) || 0;
+
+
+    /* -----------------------------------------------------
        REPORT HTML
-    ===================================== */
+    ----------------------------------------------------- */
 
     let reportHTML = `
 
         <div class="report-dashboard">
 
-
-            <!-- OVERALL SCORE -->
 
             <div class="score-header">
 
@@ -1179,18 +3028,16 @@ function evaluateExplanation() {
             </div>
 
 
-
-            <!-- PROGRESS BAR -->
-
             <div class="main-progress">
 
                 <div
                     class="main-progress-fill"
-                    style="width: ${score}%"
+                    style="
+                        width:${score}%
+                    "
                 ></div>
 
             </div>
-
 
 
             <!-- CONCEPT ACCURACY -->
@@ -1208,7 +3055,9 @@ function evaluateExplanation() {
 
                     <div
                         class="attribute-fill concept-fill"
-                        style="width: ${conceptAccuracy}%"
+                        style="
+                            width:${conceptAccuracy}%
+                        "
                     ></div>
 
                 </div>
@@ -1221,7 +3070,6 @@ function evaluateExplanation() {
                 </div>
 
             </div>
-
 
 
             <!-- RECALL -->
@@ -1239,7 +3087,9 @@ function evaluateExplanation() {
 
                     <div
                         class="attribute-fill recall-fill"
-                        style="width: ${recall}%"
+                        style="
+                            width:${recall}%
+                        "
                     ></div>
 
                 </div>
@@ -1252,7 +3102,6 @@ function evaluateExplanation() {
                 </div>
 
             </div>
-
 
 
             <!-- APPLICATION -->
@@ -1270,7 +3119,9 @@ function evaluateExplanation() {
 
                     <div
                         class="attribute-fill application-fill"
-                        style="width: ${application}%"
+                        style="
+                            width:${application}%
+                        "
                     ></div>
 
                 </div>
@@ -1285,8 +3136,7 @@ function evaluateExplanation() {
             </div>
 
 
-
-            <!-- EXPLANATION DEPTH -->
+            <!-- EXPLANATION -->
 
             <div class="attribute-row">
 
@@ -1301,7 +3151,9 @@ function evaluateExplanation() {
 
                     <div
                         class="attribute-fill depth-fill"
-                        style="width: ${explanationDepth}%"
+                        style="
+                            width:${explanationDepth}%
+                        "
                     ></div>
 
                 </div>
@@ -1316,17 +3168,18 @@ function evaluateExplanation() {
             </div>
 
 
-
-            <!-- TOPIC DETAILS -->
+            <!-- TOPIC -->
 
             <div class="report-topic">
 
                 📚 <b>Topic:</b>
-                ${topic}
+
+                ${escapeHTML(topic)}
 
                 <br><br>
 
                 📝 <b>Words Used:</b>
+
                 ${wordCount}
 
             </div>
@@ -1334,26 +3187,91 @@ function evaluateExplanation() {
     `;
 
 
-    /* =====================================
-       SCORE FEEDBACK
-    ===================================== */
+    /* -----------------------------------------------------
+       80%+ SUCCESS
+    ----------------------------------------------------- */
+
+    if (
+        score >= 80
+    ) {
 
 
-    if (score >= 80) {
+        /*
+           Unlock next topic.
+        */
+
+       if (
+    currentTopicIndex <
+    topics.length - 1
+) {
+
+    const nextTopicIndex =
+    currentTopicIndex + 1;
+
+unlockedTopics.add(
+    nextTopicIndex
+);
+
+/* -------------------------------------------------
+   UPDATE NEXT TOPIC CARD IMMEDIATELY
+------------------------------------------------- */
+
+const nextCard =
+    document.getElementById(
+        "topic-card-" +
+        nextTopicIndex
+    );
+
+if (nextCard) {
+
+    const icon =
+        nextCard.querySelector(
+            ".topic-lock-icon"
+        );
+
+    const status =
+        nextCard.querySelector(
+            ".topic-status"
+        );
+
+    if (icon) {
+
+        icon.innerText =
+            "📚";
+
+    }
+
+    if (status) {
+
+        status.innerText =
+            "Click to learn";
+
+    }
+
+}
+
+}
+
 
         reportHTML += `
 
-            <div class="report-feedback">
+            <div
+                class="report-feedback"
+            >
 
                 <h3>
+
                     🎉 Excellent Work!
+
                 </h3>
 
 
                 <p>
 
-                    Great job! You have demonstrated
-                    a strong understanding of this topic.
+                    ${escapeHTML(
+                        result.feedback ||
+                        "You demonstrated a strong understanding of this topic."
+                    )}
 
                 </p>
 
@@ -1363,42 +3281,80 @@ function evaluateExplanation() {
                     Your score is
                     <b>${score}%</b>.
 
-                    The next topic is now unlocked! 🚀
+                    The next topic is now
+                    unlocked! 🚀
 
                 </p>
 
 
-                <button
-                    class="next-topic-btn"
-                    onclick="goToNextTopic()"
-                >
+                ${
+                    currentTopicIndex <
+                    topics.length - 1
+                    ?
 
-                    ➡️ Go to Next Topic
+                    `
 
-                </button>
+                    <button
+                        class="next-topic-btn"
+                        onclick="goToNextTopic()"
+                    >
+
+                        ➡️ Go to Next Topic
+
+                    </button>
+
+                    `
+
+                    :
+
+                    `
+
+                    <p>
+
+                        🎉 You completed
+                        the final topic!
+
+                    </p>
+
+                    `
+                }
 
             </div>
 
         `;
 
+
     }
 
 
-    else if (score >= 60) {
+    /* -----------------------------------------------------
+       60-79
+    ----------------------------------------------------- */
+
+    else if (
+        score >= 60
+    ) {
+
 
         reportHTML += `
 
-            <div class="report-feedback">
+            <div
+                class="report-feedback"
+            >
 
                 <h3>
+
                     👍 Good Attempt!
+
                 </h3>
 
 
                 <p>
 
-                    You have a basic understanding
-                    of the topic.
+                    ${escapeHTML(
+                        result.feedback ||
+                        "You have a basic understanding of the topic."
+                    )}
 
                 </p>
 
@@ -1414,8 +3370,9 @@ function evaluateExplanation() {
                 <p>
 
                     🎯 Add more concepts,
-                    examples and practical applications
-                    to reach <b>80%</b>.
+                    examples and practical
+                    applications to reach
+                    <b>80%</b>.
 
                 </p>
 
@@ -1426,15 +3383,34 @@ function evaluateExplanation() {
     }
 
 
+    /* -----------------------------------------------------
+       BELOW 60
+    ----------------------------------------------------- */
+
     else {
+
 
         reportHTML += `
 
-            <div class="report-feedback">
+            <div
+                class="report-feedback"
+            >
 
                 <h3>
+
                     📚 Keep Practicing!
+
                 </h3>
+
+
+                <p>
+
+                    ${escapeHTML(
+                        result.feedback ||
+                        "Review the topic and explain it again with more important concepts and examples."
+                    )}
+
+                </p>
 
 
                 <p>
@@ -1447,18 +3423,9 @@ function evaluateExplanation() {
 
                 <p>
 
-                    Review the topic again and explain
-                    it with more important concepts
-                    and examples.
-
-                </p>
-
-
-                <p>
-
                     🎯 You need at least
-                    <b>80%</b> to unlock
-                    the next topic.
+                    <b>80%</b>
+                    to unlock the next topic.
 
                 </p>
 
@@ -1469,8 +3436,6 @@ function evaluateExplanation() {
     }
 
 
-    /* Close dashboard */
-
     reportHTML += `
 
         </div>
@@ -1478,77 +3443,254 @@ function evaluateExplanation() {
     `;
 
 
-    /* =====================================
-       DISPLAY REPORT
-    ===================================== */
+    /* -----------------------------------------------------
+       DISPLAY
+    ----------------------------------------------------- */
 
     report.innerHTML =
         reportHTML;
 
 
-    /* Scroll to report */
+    /* -----------------------------------------------------
+       SCROLL
+    ----------------------------------------------------- */
 
     report.scrollIntoView({
 
-        behavior: "smooth",
+        behavior:
+            "smooth",
 
-        block: "center"
+        block:
+            "center"
 
     });
 
 }
 
 
-/* =========================================
-   GO TO NEXT TOPIC
-========================================= */
+/* =========================================================
+   SAFE SCORE
+========================================================= */
 
-function goToNextTopic() {
+function safeScore(
+    value
+) {
+
+
+    const number =
+        Number(value);
+
 
     if (
-        currentTopicIndex <
-        topics.length - 1
+        !Number.isFinite(number)
     ) {
 
-        currentTopicIndex++;
-
-
-        alert(
-            "🎉 Congratulations! Moving to the next topic."
-        );
-
-
-        selectTopic(
-            currentTopicIndex
-        );
+        return 0;
 
     }
 
 
-    else {
+    return Math.max(
 
-        document
-            .getElementById("learnContent")
-            .innerHTML = `
+        0,
+
+        Math.min(
+
+            100,
+
+            Math.round(
+                number
+            )
+
+        )
+
+    );
+
+}
+
+
+/* =========================================================
+   GO TO NEXT TOPIC
+========================================================= */
+
+function goToNextTopic() {
+
+
+    if (
+        currentTopicIndex >=
+        topics.length - 1
+    ) {
+
+
+        const learnContent =
+            document.getElementById(
+                "learnContent"
+            );
+
+
+        if (learnContent) {
+
+            learnContent.innerHTML = `
 
                 <h3>
+
                     🎉 Congratulations!
+
                 </h3>
+
 
                 <p>
 
-                    You have completed all topics
-                    in your current learning plan! 🚀
+                    You have completed
+                    all topics in your
+                    current learning plan! 🚀
 
                 </p>
 
             `;
+
+        }
 
 
         alert(
             "🎉 Congratulations! You completed all topics!"
         );
 
+
+        return;
+
     }
 
+
+    const nextIndex =
+        currentTopicIndex + 1;
+
+
+    /* -----------------------------------------------------
+       CHECK UNLOCK
+    ----------------------------------------------------- */
+
+    if (
+        !unlockedTopics.has(
+            nextIndex
+        )
+    ) {
+
+        alert(
+            "🔒 Score 80% or above on the current topic to unlock the next topic."
+        );
+
+        return;
+
+    }
+
+
+    currentTopicIndex =
+        nextIndex;
+
+
+    selectTopic(
+        currentTopicIndex
+    );
+
 }
+
+
+/* =========================================================
+   GET VALUE
+========================================================= */
+
+function getValue(
+    id
+) {
+
+
+    const element =
+        document.getElementById(
+            id
+        );
+
+
+    return element
+        ? element.value.trim()
+        : "";
+
+}
+
+
+/* =========================================================
+   KEYBOARD ACCESS FOR TOPIC CARDS
+========================================================= */
+
+document.addEventListener(
+    "keydown",
+    function(event) {
+
+
+        if (
+            event.target &&
+            event.target.classList &&
+            event.target.classList.contains(
+                "learning-topic-card"
+            )
+        ) {
+
+
+            if (
+                event.key ===
+                "Enter"
+            ) {
+
+                event.target.click();
+
+            }
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   INITIAL LOAD
+========================================================= */
+
+console.log(
+    "========================================"
+);
+
+console.log(
+    "✅ LearnMirror AI script loaded successfully."
+);
+
+console.log(
+    "📄 PDF Upload: Enabled"
+);
+
+console.log(
+    "📅 Day-wise Plan: Enabled"
+);
+
+console.log(
+    "📚 5 Topics Per Row: Enabled"
+);
+
+console.log(
+    "🤖 AI Tutor: Enabled"
+);
+
+console.log(
+    "🎤 Voice Recognition: Enabled"
+);
+
+console.log(
+    "🧠 Teach Back Evaluation: Enabled"
+);
+
+console.log(
+    "🎯 80% Unlock System: Enabled"
+);
+
+console.log(
+    "========================================"
+);

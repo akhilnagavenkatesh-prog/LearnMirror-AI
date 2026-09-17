@@ -5,13 +5,22 @@
 
     <meta charset="UTF-8">
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>LearnMirror AI</title>
 
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- =====================================================
+         CSS
+    ====================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}?v=3001"
+    >
 
 </head>
 
@@ -19,7 +28,9 @@
 <body>
 
 
-<!-- ================= HEADER ================= -->
+<!-- =====================================================
+     HEADER
+===================================================== -->
 
 <header>
 
@@ -29,21 +40,34 @@
 
     </div>
 
-    <p>Don't just study. Prove you understand.</p>
+
+    <p>
+        Don't just study. Prove you understand.
+    </p>
 
 </header>
 
 
 
+<!-- =====================================================
+     MAIN
+===================================================== -->
+
 <main>
 
 
-<!-- ================= STUDENT PROFILE ================= -->
+<!-- =====================================================
+     STUDENT PROFILE
+===================================================== -->
 
 <section class="card">
 
-    <h2>👤 Student Profile</h2>
+    <h2>
+        👤 Student Profile
+    </h2>
 
+
+    <!-- COURSE -->
 
     <input
         type="text"
@@ -51,6 +75,8 @@
         placeholder="Course (Example: B.Tech AIML)"
     >
 
+
+    <!-- SEMESTER -->
 
     <input
         type="text"
@@ -60,7 +86,9 @@
 
 
 
-    <!-- ================= SYLLABUS ================= -->
+    <!-- =================================================
+         SYLLABUS
+    ================================================= -->
 
     <h3 class="section-title">
 
@@ -75,6 +103,11 @@
 
     </p>
 
+
+
+    <!-- =================================================
+         SYLLABUS TEXT
+    ================================================= -->
 
     <textarea
         id="syllabusText"
@@ -98,41 +131,83 @@ Topic D"
 
 
 
+    <!-- =================================================
+         OR
+    ================================================= -->
+
     <div class="or-text">
-
         OR
-
     </div>
 
 
 
-    <!-- ================= PDF UPLOAD ================= -->
+    <!-- =================================================
+     PDF UPLOAD
+================================================= -->
 
-    <label class="upload-box">
+<div class="pdf-upload-section">
 
-        📄 Upload Syllabus PDF
+    <!-- Hidden actual file input -->
+    <input
+        type="file"
+        id="syllabusFile"
+        name="syllabus"
+        accept=".pdf,application/pdf"
+        style="display:none;"
+        onchange="handlePDFSelection(this)"
+    >
 
-        <input
-            type="file"
-            id="syllabusFile"
-            accept=".pdf"
-            onchange="uploadSyllabus()"
-        >
+    <!-- CLICK TO SELECT PDF -->
+    <button
+        type="button"
+        id="choosePdfBtn"
+        class="upload-box"
+        onclick="document.getElementById('syllabusFile').click()"
+    >
 
-        <span id="fileName">
-
-            Choose PDF File
-
+        <span class="upload-icon">
+            📄
         </span>
 
-    </label>
+        <span class="upload-title">
+            Choose Syllabus PDF
+        </span>
+
+        <span
+            id="fileName"
+            class="file-name"
+        >
+            No PDF selected
+        </span>
+
+    </button>
 
 
-    <p id="uploadStatus"></p>
+    <!-- UPLOAD BUTTON -->
+
+    <button
+        type="button"
+        id="uploadPdfBtn"
+        class="upload-pdf-btn"
+        onclick="uploadSyllabus()"
+    >
+
+        📤 Upload & Extract PDF
+
+    </button>
 
 
+    <!-- STATUS -->
 
-    <!-- ================= EXAM DATE ================= -->
+    <div
+        id="uploadStatus"
+        class="upload-status"
+    ></div>
+
+</div>
+    <!-- =================================================
+         EXAM DATE
+    ================================================= -->
 
     <label class="input-label">
 
@@ -148,7 +223,9 @@ Topic D"
 
 
 
-    <!-- ================= STUDY TIME ================= -->
+    <!-- =================================================
+         DAILY STUDY TIME
+    ================================================= -->
 
     <label class="input-label">
 
@@ -167,7 +244,9 @@ Topic D"
 
 
 
-    <!-- ================= GENERATE PLAN ================= -->
+    <!-- =================================================
+         GENERATE PLAN
+    ================================================= -->
 
     <button
         type="button"
@@ -184,11 +263,15 @@ Topic D"
 
 
 
-<!-- ================= LEARNING PLAN ================= -->
+<!-- =====================================================
+     PERSONALIZED LEARNING PLAN
+===================================================== -->
 
 <section class="card">
 
-    <h2>📅 Personalized Learning Plan</h2>
+    <h2>
+        📅 Personalized Learning Plan
+    </h2>
 
 
     <div id="planSummary">
@@ -207,20 +290,98 @@ Topic D"
 
 
 
-<!-- ================= LEARN ================= -->
+<!-- =====================================================
+     LEARN
+===================================================== -->
 
 <section class="card">
 
-    <h2>📚 Learn</h2>
+    <h2>
+        📚 Learn
+    </h2>
 
 
     <div id="learnContent">
 
-        <h3>No topic selected yet</h3>
+        <h3>
+            No topic selected yet
+        </h3>
+
 
         <p>
-            Generate your study plan and select a topic to start learning.
+
+            Generate your study plan and select a topic
+            to start learning.
+
         </p>
+
+    </div>
+
+
+
+    <!-- LEARNING RESOURCES -->
+
+    <div id="learningResources"></div>
+
+
+
+    <!-- =================================================
+         AI TUTOR
+    ================================================= -->
+
+    <div id="aiTutor">
+
+        <h3>
+            🤖 AI Tutor
+        </h3>
+
+
+        <p class="small-text">
+
+            Ask questions about the selected topic.
+
+        </p>
+
+
+        <div id="tutorChat">
+
+            <div class="tutor-message tutor-ai">
+
+                👋 Hi! Select a topic and ask me anything
+                about it.
+
+            </div>
+
+        </div>
+
+
+        <div class="tutor-input-row">
+
+
+            <input
+                type="text"
+                id="tutorQuestion"
+                placeholder="Ask your doubt..."
+                onkeydown="
+                    if(event.key === 'Enter') {
+                        askAITutor();
+                    }
+                "
+            >
+
+
+            <button
+                type="button"
+                class="tutor-btn"
+                onclick="askAITutor()"
+            >
+
+                ➤ Ask
+
+            </button>
+
+
+        </div>
 
     </div>
 
@@ -229,28 +390,30 @@ Topic D"
 
 
 
-<!-- ================= TEACH BACK ================= -->
+<!-- =====================================================
+     TEACH BACK
+===================================================== -->
 
 <section class="card">
 
-    <h2>🎤 Teach Back</h2>
+    <h2>
+        🎤 Teach Back
+    </h2>
 
 
     <p>
-
         Explain the selected topic in your own words.
-
     </p>
 
 
     <textarea
         id="explanation"
-        placeholder="Type your explanation here..."
+        placeholder="Explain the selected topic here in your own words..."
     ></textarea>
 
 
 
-    <!-- ================= VOICE BUTTONS ================= -->
+    <!-- VOICE -->
 
     <div class="voice-buttons">
 
@@ -264,7 +427,6 @@ Topic D"
             🎙️ Start Speaking
 
         </button>
-
 
 
         <button
@@ -281,12 +443,11 @@ Topic D"
     </div>
 
 
-
     <p id="voiceStatus"></p>
 
 
 
-    <!-- ================= EVALUATE ================= -->
+    <!-- EVALUATE -->
 
     <button
         type="button"
@@ -303,15 +464,18 @@ Topic D"
 
 
 
-<!-- ================= REPORT ================= -->
+<!-- =====================================================
+     UNDERSTANDING REPORT
+===================================================== -->
 
 <section class="card report">
 
-    <h2>📊 Understanding Report</h2>
+    <h2>
+        📊 Understanding Report
+    </h2>
 
 
     <div id="report">
-
 
         <div class="report-placeholder">
 
@@ -319,13 +483,13 @@ Topic D"
                 Your understanding score will appear here.
             </p>
 
+
             <p>
                 Complete the Teach Back section to generate
                 your personalized report.
             </p>
 
         </div>
-
 
     </div>
 
@@ -337,7 +501,9 @@ Topic D"
 
 
 
-<!-- ================= FOOTER ================= -->
+<!-- =====================================================
+     FOOTER
+===================================================== -->
 
 <footer>
 
@@ -347,10 +513,12 @@ Topic D"
 
 
 
-<!-- ================= JAVASCRIPT ================= -->
+<!-- =====================================================
+     JAVASCRIPT
+===================================================== -->
 
 <script
-    src="{{ url_for('static', filename='script.js') }}"
+    src="{{ url_for('static', filename='script.js') }}?v=3001"
 ></script>
 
 
