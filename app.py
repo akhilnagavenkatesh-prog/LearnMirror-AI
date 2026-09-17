@@ -4,12 +4,12 @@ import os
 import json
 import uuid
 import PyPDF2
-import requests
+from openai import OpenAI
 
 
 # =========================================================
 # LEARNMIRROR AI
-# Flask + Ollama Local AI
+# Flask + OpenAI API
 # =========================================================
 
 app = Flask(__name__)
@@ -31,11 +31,38 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================================================
-# OLLAMA CONFIGURATION
+# OPENAI CONFIGURATION
 # =========================================================
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "llama3.2"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+OPENAI_MODEL = os.environ.get(
+    "OPENAI_MODEL",
+    "gpt-5.6-luna"
+)
+
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+
+def call_openai(prompt):
+    if not OPENAI_API_KEY or client is None:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not configured on the server."
+        )
+
+    response = client.responses.create(
+        model=OPENAI_MODEL,
+        input=prompt
+    )
+
+    answer = getattr(response, "output_text", None)
+
+    if not answer:
+        raise RuntimeError(
+            "OpenAI returned an empty response."
+        )
+
+    return answer.strip()
 
 
 # =========================================================
@@ -71,7 +98,7 @@ def safe_score(value):
 
 def extract_json_from_ai(text):
     """
-    Safely extract JSON from an Ollama response.
+    Safely extract JSON from an AI response.
 
     Handles:
     - normal JSON
@@ -154,7 +181,6 @@ def upload_syllabus():
         print("         SYLLABUS UPLOAD")
         print("========================================")
 
-
         # -----------------------------------------------------
         # GET FILE
         # -----------------------------------------------------
@@ -164,7 +190,6 @@ def upload_syllabus():
         # Backward compatibility
         if file is None:
             file = request.files.get("file")
-
 
         # -----------------------------------------------------
         # NO FILE
@@ -180,7 +205,6 @@ def upload_syllabus():
                 "message": "No syllabus file uploaded."
             }), 400
 
-
         # -----------------------------------------------------
         # EMPTY FILENAME
         # -----------------------------------------------------
@@ -194,7 +218,6 @@ def upload_syllabus():
                 "error": "No file selected.",
                 "message": "No file selected."
             }), 400
-
 
         # -----------------------------------------------------
         # FILE TYPE CHECK
@@ -210,7 +233,6 @@ def upload_syllabus():
                 "message": "Only PDF files are allowed."
             }), 400
 
-
         # -----------------------------------------------------
         # SECURE FILENAME
         # -----------------------------------------------------
@@ -224,7 +246,6 @@ def upload_syllabus():
                 "error": "Invalid filename.",
                 "message": "Invalid filename."
             }), 400
-
 
         # -----------------------------------------------------
         # UNIQUE FILENAME
@@ -246,20 +267,17 @@ def upload_syllabus():
             unique_filename
         )
 
-
         # -----------------------------------------------------
         # SAVE FILE
         # -----------------------------------------------------
 
         file.save(filepath)
 
-
         print("Original file :", original_filename)
         print("Saved file    :", unique_filename)
         print("Location      :", filepath)
         print("----------------------------------------")
         print("Extracting PDF text...")
-
 
         # -----------------------------------------------------
         # PDF EXTRACTION
@@ -283,7 +301,6 @@ def upload_syllabus():
                     "message": "The PDF contains no pages."
                 }), 400
 
-
             for page_number, page in enumerate(
                 reader.pages,
                 start=1
@@ -306,7 +323,6 @@ def upload_syllabus():
 
                     text = ""
 
-
                 if text:
 
                     text = text.strip()
@@ -317,7 +333,6 @@ def upload_syllabus():
                             text
                         )
 
-
         # -----------------------------------------------------
         # COMBINE TEXT
         # -----------------------------------------------------
@@ -325,7 +340,6 @@ def upload_syllabus():
         extracted_text = "\n\n".join(
             extracted_pages
         ).strip()
-
 
         # -----------------------------------------------------
         # NO TEXT FOUND
@@ -350,7 +364,6 @@ def upload_syllabus():
                     "Please upload a text-based PDF."
             }), 400
 
-
         # -----------------------------------------------------
         # SUCCESS
         # -----------------------------------------------------
@@ -361,7 +374,6 @@ def upload_syllabus():
         print("Pages with text     :", len(extracted_pages))
         print("========================================")
         print()
-
 
         return jsonify({
 
@@ -377,7 +389,6 @@ def upload_syllabus():
                 "Syllabus extracted successfully!"
 
         })
-
 
     # ---------------------------------------------------------
     # PDF ERROR
@@ -401,7 +412,6 @@ def upload_syllabus():
                 "The file may be corrupted or invalid."
 
         }), 400
-
 
     # ---------------------------------------------------------
     # GENERAL ERROR
@@ -440,7 +450,6 @@ def ask_tutor():
 
         data = request.get_json(silent=True)
 
-
         if not data:
 
             return jsonify({
@@ -452,7 +461,6 @@ def ask_tutor():
 
             }), 400
 
-
         # -----------------------------------------------------
         # GET TOPIC
         # -----------------------------------------------------
@@ -461,7 +469,6 @@ def ask_tutor():
             data.get("topic", "")
         ).strip()
 
-
         # -----------------------------------------------------
         # GET QUESTION
         # -----------------------------------------------------
@@ -469,7 +476,6 @@ def ask_tutor():
         question = str(
             data.get("question", "")
         ).strip()
-
 
         # -----------------------------------------------------
         # VALIDATE TOPIC
@@ -486,7 +492,6 @@ def ask_tutor():
 
             }), 400
 
-
         # -----------------------------------------------------
         # VALIDATE QUESTION
         # -----------------------------------------------------
@@ -501,7 +506,6 @@ def ask_tutor():
                     "Please enter a question."
 
             }), 400
-
 
         # =====================================================
         # TUTOR PROMPT
@@ -546,7 +550,6 @@ Instructions:
 Answer the student's question now.
 """
 
-
         # =====================================================
         # CONSOLE LOG
         # =====================================================
@@ -557,51 +560,14 @@ Answer the student's question now.
         print("========================================")
         print("Topic    :", topic)
         print("Question :", question)
-        print("Model    :", OLLAMA_MODEL)
+        print("Model    :", OPENAI_MODEL)
         print("========================================")
 
-
         # =====================================================
-        # OLLAMA REQUEST
+        # OPENAI REQUEST
         # =====================================================
 
-        ollama_response = requests.post(
-
-            OLLAMA_URL,
-
-            json={
-
-                "model": OLLAMA_MODEL,
-
-                "prompt": prompt,
-
-                "stream": False
-
-            },
-
-            timeout=120
-
-        )
-
-
-        # -----------------------------------------------------
-        # HTTP ERROR
-        # -----------------------------------------------------
-
-        ollama_response.raise_for_status()
-
-
-        # -----------------------------------------------------
-        # GET RESULT
-        # -----------------------------------------------------
-
-        result = ollama_response.json()
-
-
-        answer = str(
-            result.get("response", "")
-        ).strip()
-
+        answer = call_openai(prompt)
 
         # -----------------------------------------------------
         # EMPTY RESPONSE
@@ -614,10 +580,9 @@ Answer the student's question now.
                 "success": False,
 
                 "error":
-                    "Ollama returned an empty response."
+                    "OpenAI returned an empty response."
 
             }), 500
-
 
         # -----------------------------------------------------
         # SUCCESS
@@ -630,71 +595,6 @@ Answer the student's question now.
             "answer": answer
 
         })
-
-
-    # =========================================================
-    # OLLAMA CONNECTION ERROR
-    # =========================================================
-
-    except requests.exceptions.ConnectionError:
-
-        print(
-            "\nERROR: Cannot connect to Ollama."
-        )
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "Cannot connect to Ollama. "
-                "Please make sure Ollama is running."
-
-        }), 503
-
-
-    # =========================================================
-    # TIMEOUT
-    # =========================================================
-
-    except requests.exceptions.Timeout:
-
-        print(
-            "\nERROR: AI Tutor timed out."
-        )
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "AI Tutor took too long to respond. "
-                "Please try again."
-
-        }), 504
-
-
-    # =========================================================
-    # REQUEST ERROR
-    # =========================================================
-
-    except requests.exceptions.RequestException as e:
-
-        print(
-            "\nOLLAMA REQUEST ERROR:"
-        )
-
-        print(str(e))
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "Ollama request failed: " + str(e)
-
-        }), 500
-
 
     # =========================================================
     # GENERAL ERROR
@@ -717,6 +617,7 @@ Answer the student's question now.
 
         }), 500
 
+
 # =========================================================
 # AI UNDERSTANDING EVALUATION
 # =========================================================
@@ -735,7 +636,6 @@ def evaluate_understanding():
 
         data = request.get_json(silent=True)
 
-
         if not data:
 
             return jsonify({
@@ -747,7 +647,6 @@ def evaluate_understanding():
 
             }), 400
 
-
         # =====================================================
         # GET TOPIC
         # =====================================================
@@ -756,7 +655,6 @@ def evaluate_understanding():
             data.get("topic", "")
         ).strip()
 
-
         # =====================================================
         # GET EXPLANATION
         # =====================================================
@@ -764,7 +662,6 @@ def evaluate_understanding():
         explanation = str(
             data.get("explanation", "")
         ).strip()
-
 
         # =====================================================
         # VALIDATION
@@ -781,7 +678,6 @@ def evaluate_understanding():
 
             }), 400
 
-
         if not explanation:
 
             return jsonify({
@@ -793,7 +689,6 @@ def evaluate_understanding():
 
             }), 400
 
-
         # =====================================================
         # WORD COUNT
         # =====================================================
@@ -801,7 +696,6 @@ def evaluate_understanding():
         word_count = len(
             explanation.split()
         )
-
 
         # =====================================================
         # EMPTY / MEANINGLESS ANSWER
@@ -830,7 +724,6 @@ def evaluate_understanding():
                 "unlock": False
 
             })
-
 
         # =====================================================
         # TOPIC RELEVANCE CHECK
@@ -886,32 +779,14 @@ or
 """
 
         # =====================================================
-        # SEND RELEVANCE CHECK TO OLLAMA
+        # SEND RELEVANCE CHECK TO OPENAI
         # =====================================================
 
         try:
 
-            relevance_response = requests.post(
-
-                OLLAMA_URL,
-
-                json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": relevance_prompt,
-                    "stream": False,
-                    "format": "json"
-                },
-
-                timeout=60
+            relevance_text = call_openai(
+                relevance_prompt
             )
-
-            relevance_response.raise_for_status()
-
-            relevance_result = relevance_response.json()
-
-            relevance_text = str(
-                relevance_result.get("response", "")
-            ).strip()
 
             print("\n")
             print("========================================")
@@ -953,7 +828,6 @@ or
                     "to the selected topic. Please try again."
 
             }), 500
-
 
         # =====================================================
         # STOP IF ANSWER IS NOT RELATED
@@ -1018,13 +892,11 @@ SELECTED TOPIC
 
 {topic}
 
-
 =========================================================
 STUDENT ANSWER
 =========================================================
 
 {explanation}
-
 
 =========================================================
 VERY IMPORTANT SCORING PHILOSOPHY
@@ -1049,7 +921,6 @@ Irrelevant information does not increase marks.
 
 Incorrect information should reduce the score.
 
-
 =========================================================
 STEP 1 — RELEVANCE
 =========================================================
@@ -1067,7 +938,6 @@ If the answer is:
 - about another topic
 
 then all scores must be 0.
-
 
 =========================================================
 STEP 2 — CONCEPT ACCURACY
@@ -1102,7 +972,6 @@ in their own words, Concept Accuracy should be high.
 
 Do not demand textbook wording.
 
-
 =========================================================
 STEP 3 — RECALL / IMPORTANT POINTS
 =========================================================
@@ -1128,7 +997,6 @@ Do NOT require every minor textbook detail.
 
 If the student covers the main important points,
 give a strong Recall score.
-
 
 =========================================================
 STEP 4 — APPLICATION
@@ -1159,7 +1027,6 @@ Do NOT make Application mandatory for every topic.
 
 If the student gives a correct example/program, reward it.
 
-
 =========================================================
 STEP 5 — EXPLANATION QUALITY
 =========================================================
@@ -1181,7 +1048,6 @@ Do NOT use word count as the main factor.
 A 150-word excellent explanation can score higher than
 an 800-word poor explanation.
 
-
 =========================================================
 STEP 6 — LENGTH
 =========================================================
@@ -1193,7 +1059,6 @@ Never give marks simply because an answer is long.
 Never automatically reduce marks because an answer is short.
 
 Judge the actual knowledge demonstrated.
-
 
 =========================================================
 STEP 7 — SCORE CALCULATION
@@ -1219,7 +1084,6 @@ Base Score =
     Explanation Quality * 0.20
 )
 
-
 Then consider Application.
 
 Application should only improve the result when the student
@@ -1227,7 +1091,6 @@ actually demonstrates useful application or examples.
 
 Application should NOT significantly reduce an otherwise
 correct theoretical explanation.
-
 
 =========================================================
 SCORE CALIBRATION
@@ -1261,7 +1124,6 @@ This should result in approximately 83%.
 
 Even if Application is low, DO NOT destroy this score.
 
-
 =========================================================
 EXAMPLE
 =========================================================
@@ -1283,7 +1145,6 @@ If the student correctly explains:
 then the answer should be considered a strong
 understanding even if no real-world application is given.
 
-
 =========================================================
 WRONG ANSWER
 =========================================================
@@ -1296,7 +1157,6 @@ If the student writes 800 words but contains:
 - misconceptions
 
 then do NOT give 80+ merely because of the word count.
-
 
 =========================================================
 FEEDBACK
@@ -1316,7 +1176,6 @@ is short.
 
 For a strong answer, explicitly acknowledge that the
 student demonstrated good conceptual understanding.
-
 
 =========================================================
 OUTPUT
@@ -1343,9 +1202,8 @@ Return exactly:
 All scores must be integers from 0 to 100.
 """
 
-
         # =====================================================
-        # SEND TO OLLAMA
+        # SEND TO OPENAI
         # =====================================================
 
         print("\n")
@@ -1354,7 +1212,7 @@ All scores must be integers from 0 to 100.
         print("========================================")
         print("Topic:", topic)
         print("Words:", word_count)
-        print("Model:", OLLAMA_MODEL)
+        print("Model:", OPENAI_MODEL)
         print("----------------------------------------")
         print("SCORING WEIGHTS")
         print("Concept Accuracy : 50%")
@@ -1363,51 +1221,11 @@ All scores must be integers from 0 to 100.
         print("Application      : Supporting")
         print("========================================")
 
-
-        ollama_response = requests.post(
-
-            OLLAMA_URL,
-
-            json={
-
-                "model": OLLAMA_MODEL,
-
-                "prompt": prompt,
-
-                "stream": False,
-
-                "format": "json"
-
-            },
-
-            timeout=120
-
-        )
-
-
-        # =====================================================
-        # CHECK HTTP RESPONSE
-        # =====================================================
-
-        ollama_response.raise_for_status()
-
-
-        # =====================================================
-        # READ OLLAMA RESPONSE
-        # =====================================================
-
-        result = ollama_response.json()
-
-
-        ai_text = str(
-            result.get("response", "")
-        ).strip()
-
+        ai_text = call_openai(prompt)
 
         print("\nRAW AI RESPONSE:")
         print(ai_text)
         print()
-
 
         # =====================================================
         # EMPTY AI RESPONSE
@@ -1420,10 +1238,9 @@ All scores must be integers from 0 to 100.
                 "success": False,
 
                 "error":
-                    "Ollama returned an empty evaluation."
+                    "OpenAI returned an empty evaluation."
 
             }), 500
-
 
         # =====================================================
         # PARSE JSON
@@ -1432,7 +1249,6 @@ All scores must be integers from 0 to 100.
         evaluation = extract_json_from_ai(
             ai_text
         )
-
 
         if not isinstance(
             evaluation,
@@ -1445,7 +1261,6 @@ All scores must be integers from 0 to 100.
                 0
             )
 
-
         # =====================================================
         # GET SCORES
         # =====================================================
@@ -1457,14 +1272,12 @@ All scores must be integers from 0 to 100.
             )
         )
 
-
         recall = safe_score(
             evaluation.get(
                 "recall",
                 0
             )
         )
-
 
         application = safe_score(
             evaluation.get(
@@ -1473,7 +1286,6 @@ All scores must be integers from 0 to 100.
             )
         )
 
-
         explanation_depth = safe_score(
             evaluation.get(
                 "explanation_depth",
@@ -1481,17 +1293,15 @@ All scores must be integers from 0 to 100.
             )
         )
 
-
         # =====================================================
         # FINAL SCORE
         # =====================================================
-        #
+
         # Concept Accuracy = 50%
         # Recall           = 30%
         # Explanation      = 20%
         #
         # Application is a supporting bonus.
-        #
 
         base_score = (
 
@@ -1507,13 +1317,11 @@ All scores must be integers from 0 to 100.
 
         )
 
-
         # =====================================================
         # APPLICATION BONUS
         # =====================================================
 
         application_bonus = 0
-
 
         if application >= 80:
 
@@ -1531,7 +1339,6 @@ All scores must be integers from 0 to 100.
 
             application_bonus = 0
 
-
         # =====================================================
         # CALCULATE OVERALL SCORE
         # =====================================================
@@ -1539,7 +1346,6 @@ All scores must be integers from 0 to 100.
         overall_score = round(
             base_score + application_bonus
         )
-
 
         overall_score = max(
             0,
@@ -1549,14 +1355,12 @@ All scores must be integers from 0 to 100.
             )
         )
 
-
         # =====================================================
         # IMPORTANT SCORE BOOST
         # =====================================================
-        #
+
         # Strong conceptual understanding should be capable
         # of reaching 80+ even when application is low.
-        #
 
         if (
 
@@ -1575,7 +1379,6 @@ All scores must be integers from 0 to 100.
             if overall_score < 80:
 
                 overall_score = 80
-
 
         # =====================================================
         # STRONG CONCEPTUAL ANSWER
@@ -1599,7 +1402,6 @@ All scores must be integers from 0 to 100.
 
                 overall_score = 85
 
-
         # =====================================================
         # UNLOCK
         # =====================================================
@@ -1607,7 +1409,6 @@ All scores must be integers from 0 to 100.
         unlock = (
             overall_score >= 80
         )
-
 
         # =====================================================
         # FEEDBACK
@@ -1621,7 +1422,6 @@ All scores must be integers from 0 to 100.
 
         )
 
-
         if not isinstance(
             feedback,
             str
@@ -1631,16 +1431,13 @@ All scores must be integers from 0 to 100.
                 feedback
             )
 
-
         feedback = feedback.strip()
-
 
         if not feedback:
 
             feedback = (
                 "Review the topic and try explaining it again."
             )
-
 
         # =====================================================
         # CONSOLE RESULT
@@ -1693,7 +1490,6 @@ All scores must be integers from 0 to 100.
         print("========================================")
         print()
 
-
         # =====================================================
         # RESPONSE TO JAVASCRIPT
         # =====================================================
@@ -1725,7 +1521,6 @@ All scores must be integers from 0 to 100.
 
         })
 
-
     # =========================================================
     # INVALID JSON
     # =========================================================
@@ -1733,7 +1528,7 @@ All scores must be integers from 0 to 100.
     except json.JSONDecodeError:
 
         print(
-            "\nERROR: Ollama returned invalid JSON."
+            "\nERROR: OpenAI returned invalid JSON."
         )
 
         return jsonify({
@@ -1745,71 +1540,6 @@ All scores must be integers from 0 to 100.
                 "Please try again."
 
         }), 500
-
-
-    # =========================================================
-    # OLLAMA CONNECTION ERROR
-    # =========================================================
-
-    except requests.exceptions.ConnectionError:
-
-        print(
-            "\nERROR: Cannot connect to Ollama."
-        )
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "Cannot connect to Ollama. "
-                "Please make sure Ollama is running."
-
-        }), 503
-
-
-    # =========================================================
-    # TIMEOUT
-    # =========================================================
-
-    except requests.exceptions.Timeout:
-
-        print(
-            "\nERROR: Understanding evaluation timed out."
-        )
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "AI evaluation took too long to respond. "
-                "Please try again."
-
-        }), 504
-
-
-    # =========================================================
-    # REQUEST ERROR
-    # =========================================================
-
-    except requests.exceptions.RequestException as e:
-
-        print(
-            "\nEVALUATION REQUEST ERROR:"
-        )
-
-        print(str(e))
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "Ollama evaluation failed: " + str(e)
-
-        }), 500
-
 
     # =========================================================
     # GENERAL ERROR
@@ -1843,8 +1573,8 @@ if __name__ == "__main__":
     print("========================================")
     print("          LEARNMIRROR AI")
     print("========================================")
-    print("AI Engine : Ollama")
-    print("AI Model  :", OLLAMA_MODEL)
+    print("AI Engine : OpenAI")
+    print("AI Model  :", OPENAI_MODEL)
     print("PDF Tool  : PyPDF2")
     print("Evaluation: Concept Focused")
     print("Upload    : PDF only")
@@ -1853,13 +1583,8 @@ if __name__ == "__main__":
     print("========================================")
     print()
 
-
     app.run(
-
         host="127.0.0.1",
-
         port=5000,
-
         debug=True
-
     )
