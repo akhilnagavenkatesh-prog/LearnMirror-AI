@@ -4,12 +4,12 @@ import os
 import json
 import uuid
 import PyPDF2
-from openai import OpenAI
+import ollama
 
 
 # =========================================================
 # LEARNMIRROR AI
-# Flask + OpenAI API
+# Flask + Ollama
 # =========================================================
 
 app = Flask(__name__)
@@ -31,38 +31,43 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 # =========================================================
-# OPENAI CONFIGURATION
+# OLLAMA CONFIGURATION
 # =========================================================
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
-OPENAI_MODEL = os.environ.get(
-    "OPENAI_MODEL",
-    "gpt-5.6-luna"
-)
-
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+OLLAMA_MODEL = "llama3.2:latest"
 
 
-def call_openai(prompt):
-    if not OPENAI_API_KEY or client is None:
-        raise RuntimeError(
-            "OPENAI_API_KEY is not configured on the server."
+def call_ollama(prompt):
+    """
+    Send a prompt to the local Ollama model.
+    """
+
+    try:
+
+        response = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
         )
 
-    response = client.responses.create(
-        model=OPENAI_MODEL,
-        input=prompt
-    )
+        answer = response["message"]["content"]
 
-    answer = getattr(response, "output_text", None)
+        if not answer:
+            raise RuntimeError(
+                "Ollama returned an empty response."
+            )
 
-    if not answer:
+        return answer.strip()
+
+    except Exception as e:
+
         raise RuntimeError(
-            "OpenAI returned an empty response."
+            f"Ollama connection failed: {str(e)}"
         )
-
-    return answer.strip()
 
 
 # =========================================================
@@ -89,8 +94,11 @@ def safe_score(value):
     """
 
     try:
+
         value = int(float(value))
+
     except (ValueError, TypeError):
+
         value = 0
 
     return max(0, min(100, value))
@@ -107,6 +115,7 @@ def extract_json_from_ai(text):
     """
 
     if not text:
+
         raise json.JSONDecodeError(
             "Empty AI response",
             "",
@@ -122,8 +131,11 @@ def extract_json_from_ai(text):
 
     # First attempt: direct JSON
     try:
+
         return json.loads(cleaned)
+
     except json.JSONDecodeError:
+
         pass
 
     # Second attempt: find JSON object
@@ -131,6 +143,7 @@ def extract_json_from_ai(text):
     end = cleaned.rfind("}")
 
     if start != -1 and end != -1 and end > start:
+
         possible_json = cleaned[start:end + 1]
 
         return json.loads(possible_json)
@@ -150,9 +163,15 @@ def extract_json_from_ai(text):
 def file_too_large(error):
 
     return jsonify({
+
         "success": False,
-        "error": "File is too large. Maximum allowed size is 10 MB.",
-        "message": "File is too large. Maximum allowed size is 10 MB."
+
+        "error":
+            "File is too large. Maximum allowed size is 10 MB.",
+
+        "message":
+            "File is too large. Maximum allowed size is 10 MB."
+
     }), 413
 
 
@@ -189,6 +208,7 @@ def upload_syllabus():
 
         # Backward compatibility
         if file is None:
+
             file = request.files.get("file")
 
         # -----------------------------------------------------
@@ -200,9 +220,15 @@ def upload_syllabus():
             print("ERROR: No file uploaded.")
 
             return jsonify({
+
                 "success": False,
-                "error": "No syllabus file uploaded.",
-                "message": "No syllabus file uploaded."
+
+                "error":
+                    "No syllabus file uploaded.",
+
+                "message":
+                    "No syllabus file uploaded."
+
             }), 400
 
         # -----------------------------------------------------
@@ -214,9 +240,15 @@ def upload_syllabus():
             print("ERROR: Empty filename.")
 
             return jsonify({
+
                 "success": False,
-                "error": "No file selected.",
-                "message": "No file selected."
+
+                "error":
+                    "No file selected.",
+
+                "message":
+                    "No file selected."
+
             }), 400
 
         # -----------------------------------------------------
@@ -225,34 +257,48 @@ def upload_syllabus():
 
         if not allowed_file(file.filename):
 
-            print("ERROR: Invalid file type:", file.filename)
+            print(
+                "ERROR: Invalid file type:",
+                file.filename
+            )
 
             return jsonify({
+
                 "success": False,
-                "error": "Only PDF files are allowed.",
-                "message": "Only PDF files are allowed."
+
+                "error":
+                    "Only PDF files are allowed.",
+
+                "message":
+                    "Only PDF files are allowed."
+
             }), 400
 
         # -----------------------------------------------------
         # SECURE FILENAME
         # -----------------------------------------------------
 
-        original_filename = secure_filename(file.filename)
+        original_filename = secure_filename(
+            file.filename
+        )
 
         if not original_filename:
 
             return jsonify({
+
                 "success": False,
-                "error": "Invalid filename.",
-                "message": "Invalid filename."
+
+                "error":
+                    "Invalid filename.",
+
+                "message":
+                    "Invalid filename."
+
             }), 400
 
         # -----------------------------------------------------
         # UNIQUE FILENAME
         # -----------------------------------------------------
-
-        # Prevent two files with the same name from
-        # overwriting each other.
 
         name, extension = os.path.splitext(
             original_filename
@@ -273,9 +319,21 @@ def upload_syllabus():
 
         file.save(filepath)
 
-        print("Original file :", original_filename)
-        print("Saved file    :", unique_filename)
-        print("Location      :", filepath)
+        print(
+            "Original file :",
+            original_filename
+        )
+
+        print(
+            "Saved file    :",
+            unique_filename
+        )
+
+        print(
+            "Location      :",
+            filepath
+        )
+
         print("----------------------------------------")
         print("Extracting PDF text...")
 
@@ -287,18 +345,31 @@ def upload_syllabus():
 
         with open(filepath, "rb") as pdf_file:
 
-            reader = PyPDF2.PdfReader(pdf_file)
+            reader = PyPDF2.PdfReader(
+                pdf_file
+            )
 
-            total_pages = len(reader.pages)
+            total_pages = len(
+                reader.pages
+            )
 
-            print("Total pages   :", total_pages)
+            print(
+                "Total pages   :",
+                total_pages
+            )
 
             if total_pages == 0:
 
                 return jsonify({
+
                     "success": False,
-                    "error": "The PDF contains no pages.",
-                    "message": "The PDF contains no pages."
+
+                    "error":
+                        "The PDF contains no pages.",
+
+                    "message":
+                        "The PDF contains no pages."
+
                 }), 400
 
             for page_number, page in enumerate(
@@ -307,7 +378,8 @@ def upload_syllabus():
             ):
 
                 print(
-                    f"Reading page {page_number}/{total_pages}"
+                    f"Reading page "
+                    f"{page_number}/{total_pages}"
                 )
 
                 try:
@@ -317,7 +389,8 @@ def upload_syllabus():
                 except Exception as page_error:
 
                     print(
-                        f"Page {page_number} extraction error:",
+                        f"Page {page_number} "
+                        f"extraction error:",
                         str(page_error)
                     )
 
@@ -348,20 +421,28 @@ def upload_syllabus():
         if not extracted_text:
 
             print("----------------------------------------")
-            print("ERROR: No text could be extracted.")
-            print("The PDF may be scanned/image based.")
+            print(
+                "ERROR: No text could be extracted."
+            )
+            print(
+                "The PDF may be scanned/image based."
+            )
             print("========================================")
 
             return jsonify({
+
                 "success": False,
+
                 "error":
                     "Could not extract text from this PDF. "
                     "The PDF may be scanned/image based. "
                     "Please upload a text-based PDF.",
+
                 "message":
                     "Could not extract text from this PDF. "
                     "The PDF may be scanned/image based. "
                     "Please upload a text-based PDF."
+
             }), 400
 
         # -----------------------------------------------------
@@ -370,8 +451,17 @@ def upload_syllabus():
 
         print("----------------------------------------")
         print("PDF extraction successful.")
-        print("Characters extracted:", len(extracted_text))
-        print("Pages with text     :", len(extracted_pages))
+
+        print(
+            "Characters extracted:",
+            len(extracted_text)
+        )
+
+        print(
+            "Pages with text     :",
+            len(extracted_pages)
+        )
+
         print("========================================")
         print()
 
@@ -379,11 +469,13 @@ def upload_syllabus():
 
             "success": True,
 
-            # Return original name to the frontend
-            "filename": original_filename,
+            # Return original name to frontend
+            "filename":
+                original_filename,
 
             # Extracted syllabus text
-            "text": extracted_text,
+            "text":
+                extracted_text,
 
             "message":
                 "Syllabus extracted successfully!"
@@ -428,9 +520,11 @@ def upload_syllabus():
 
             "success": False,
 
-            "error": str(e),
+            "error":
+                str(e),
 
-            "message": str(e)
+            "message":
+                str(e)
 
         }), 500
 
@@ -448,7 +542,9 @@ def ask_tutor():
         # GET JSON DATA
         # -----------------------------------------------------
 
-        data = request.get_json(silent=True)
+        data = request.get_json(
+            silent=True
+        )
 
         if not data:
 
@@ -558,16 +654,19 @@ Answer the student's question now.
         print("========================================")
         print("        LEARNMIRROR AI TUTOR")
         print("========================================")
-        print("Topic    :", topic)
-        print("Question :", question)
-        print("Model    :", OPENAI_MODEL)
+        print("AI Engine :", "Ollama")
+        print("Topic     :", topic)
+        print("Question  :", question)
+        print("Model     :", OLLAMA_MODEL)
         print("========================================")
 
         # =====================================================
-        # OPENAI REQUEST
+        # OLLAMA REQUEST
         # =====================================================
 
-        answer = call_openai(prompt)
+        answer = call_ollama(
+            prompt
+        )
 
         # -----------------------------------------------------
         # EMPTY RESPONSE
@@ -580,7 +679,7 @@ Answer the student's question now.
                 "success": False,
 
                 "error":
-                    "OpenAI returned an empty response."
+                    "Ollama returned an empty response."
 
             }), 500
 
@@ -592,7 +691,8 @@ Answer the student's question now.
 
             "success": True,
 
-            "answer": answer
+            "answer":
+                answer
 
         })
 
@@ -606,14 +706,20 @@ Answer the student's question now.
             "\nAI TUTOR ERROR:"
         )
 
-        print(type(e).__name__)
-        print(str(e))
+        print(
+            type(e).__name__
+        )
+
+        print(
+            str(e)
+        )
 
         return jsonify({
 
             "success": False,
 
-            "error": str(e)
+            "error":
+                str(e)
 
         }), 500
 
@@ -634,7 +740,9 @@ def evaluate_understanding():
         # GET DATA
         # =====================================================
 
-        data = request.get_json(silent=True)
+        data = request.get_json(
+            silent=True
+        )
 
         if not data:
 
@@ -707,21 +815,27 @@ def evaluate_understanding():
 
                 "success": True,
 
-                "concept_accuracy": 0,
+                "concept_accuracy":
+                    0,
 
-                "recall": 0,
+                "recall":
+                    0,
 
-                "application": 0,
+                "application":
+                    0,
 
-                "explanation_depth": 0,
+                "explanation_depth":
+                    0,
 
-                "overall_score": 0,
+                "overall_score":
+                    0,
 
                 "feedback":
                     "Please provide a meaningful explanation "
                     "of the selected topic.",
 
-                "unlock": False
+                "unlock":
+                    False
 
             })
 
@@ -744,21 +858,32 @@ STUDENT ANSWER:
 STRICT RULES:
 
 1. The answer MUST actually discuss the selected topic.
+
 2. The answer must contain meaningful academic information
    related to the selected topic.
+
 3. Gibberish, random letters, random words, repeated words,
    meaningless text, or keyboard typing must be considered
    NOT RELATED.
+
 4. A very short answer can be related if it contains a correct
    and meaningful concept from the selected topic.
+
 5. Do NOT judge based only on the number of words.
+
 6. Do NOT give credit for generic academic words.
+
 7. The answer must demonstrate at least some actual knowledge
    of the selected topic.
+
 8. If the answer is about another topic, mark it NOT RELATED.
+
 9. If the answer is uncertain, vague, or does not demonstrate
-   meaningful knowledge of the selected topic, mark it NOT RELATED.
+   meaningful knowledge of the selected topic, mark it
+   NOT RELATED.
+
 10. The answer does not need to use the exact textbook wording.
+
 11. Closely related terminology, abbreviations, examples, or
     correct explanations should be accepted when they clearly
     refer to the selected topic.
@@ -779,12 +904,12 @@ or
 """
 
         # =====================================================
-        # SEND RELEVANCE CHECK TO OPENAI
+        # SEND RELEVANCE CHECK TO OLLAMA
         # =====================================================
 
         try:
 
-            relevance_text = call_openai(
+            relevance_text = call_ollama(
                 relevance_prompt
             )
 
@@ -792,9 +917,14 @@ or
             print("========================================")
             print("       LEARNMIRROR RELEVANCE CHECK")
             print("========================================")
+            print("AI Engine:", "Ollama")
+            print("Model:", OLLAMA_MODEL)
             print("Topic:", topic)
             print("Words:", word_count)
-            print("Raw response:", relevance_text)
+            print(
+                "Raw response:",
+                relevance_text
+            )
             print("========================================")
 
             relevance_data = extract_json_from_ai(
@@ -802,26 +932,39 @@ or
             )
 
             relevant = bool(
-                relevance_data.get("relevant", False)
+                relevance_data.get(
+                    "relevant",
+                    False
+                )
             )
 
         except Exception as e:
 
-            print("\nRELEVANCE CHECK ERROR:")
-            print(type(e).__name__)
-            print(str(e))
+            print(
+                "\nRELEVANCE CHECK ERROR:"
+            )
+
+            print(
+                type(e).__name__
+            )
+
+            print(
+                str(e)
+            )
 
             # Fail safely:
-            # If relevance cannot be verified, do not generate
-            # an Understanding Report.
+            # If relevance cannot be verified,
+            # do not generate an Understanding Report.
 
             return jsonify({
 
                 "success": False,
 
-                "relevant": False,
+                "relevant":
+                    False,
 
-                "report_available": False,
+                "report_available":
+                    False,
 
                 "error":
                     "Unable to verify whether the answer is related "
@@ -848,21 +991,29 @@ or
 
                 "success": True,
 
-                "relevant": False,
+                "relevant":
+                    False,
 
-                "report_available": False,
+                "report_available":
+                    False,
 
-                "concept_accuracy": None,
+                "concept_accuracy":
+                    None,
 
-                "recall": None,
+                "recall":
+                    None,
 
-                "application": None,
+                "application":
+                    None,
 
-                "explanation_depth": None,
+                "explanation_depth":
+                    None,
 
-                "overall_score": None,
+                "overall_score":
+                    None,
 
-                "unlock": False,
+                "unlock":
+                    False,
 
                 "message":
                     "Your answer is not related to the selected topic.",
@@ -1203,16 +1354,17 @@ All scores must be integers from 0 to 100.
 """
 
         # =====================================================
-        # SEND TO OPENAI
+        # SEND TO OLLAMA
         # =====================================================
 
         print("\n")
         print("========================================")
         print("     LEARNMIRROR UNDERSTANDING AI")
         print("========================================")
-        print("Topic:", topic)
-        print("Words:", word_count)
-        print("Model:", OPENAI_MODEL)
+        print("AI Engine : Ollama")
+        print("Model     :", OLLAMA_MODEL)
+        print("Topic     :", topic)
+        print("Words     :", word_count)
         print("----------------------------------------")
         print("SCORING WEIGHTS")
         print("Concept Accuracy : 50%")
@@ -1221,7 +1373,9 @@ All scores must be integers from 0 to 100.
         print("Application      : Supporting")
         print("========================================")
 
-        ai_text = call_openai(prompt)
+        ai_text = call_ollama(
+            prompt
+        )
 
         print("\nRAW AI RESPONSE:")
         print(ai_text)
@@ -1238,7 +1392,7 @@ All scores must be integers from 0 to 100.
                 "success": False,
 
                 "error":
-                    "OpenAI returned an empty evaluation."
+                    "Ollama returned an empty evaluation."
 
             }), 500
 
@@ -1300,8 +1454,7 @@ All scores must be integers from 0 to 100.
         # Concept Accuracy = 50%
         # Recall           = 30%
         # Explanation      = 20%
-        #
-        # Application is a supporting bonus.
+        # Application      = Supporting bonus
 
         base_score = (
 
@@ -1496,7 +1649,8 @@ All scores must be integers from 0 to 100.
 
         return jsonify({
 
-            "success": True,
+            "success":
+                True,
 
             "concept_accuracy":
                 concept_accuracy,
@@ -1528,12 +1682,13 @@ All scores must be integers from 0 to 100.
     except json.JSONDecodeError:
 
         print(
-            "\nERROR: OpenAI returned invalid JSON."
+            "\nERROR: Ollama returned invalid JSON."
         )
 
         return jsonify({
 
-            "success": False,
+            "success":
+                False,
 
             "error":
                 "AI returned an invalid evaluation format. "
@@ -1551,14 +1706,21 @@ All scores must be integers from 0 to 100.
             "\nUNDERSTANDING EVALUATION ERROR:"
         )
 
-        print(type(e).__name__)
-        print(str(e))
+        print(
+            type(e).__name__
+        )
+
+        print(
+            str(e)
+        )
 
         return jsonify({
 
-            "success": False,
+            "success":
+                False,
 
-            "error": str(e)
+            "error":
+                str(e)
 
         }), 500
 
@@ -1573,8 +1735,8 @@ if __name__ == "__main__":
     print("========================================")
     print("          LEARNMIRROR AI")
     print("========================================")
-    print("AI Engine : OpenAI")
-    print("AI Model  :", OPENAI_MODEL)
+    print("AI Engine : Ollama")
+    print("AI Model  :", OLLAMA_MODEL)
     print("PDF Tool  : PyPDF2")
     print("Evaluation: Concept Focused")
     print("Upload    : PDF only")
