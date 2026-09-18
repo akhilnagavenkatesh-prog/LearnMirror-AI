@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>LearnMirror AI</title>
+
+
+    <!-- =====================================================
+         CSS
+    ====================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}?v=3001"
+    >
+
+</head>
+
+
+<body>
+
+
+<!-- =====================================================
+     HEADER
+===================================================== -->
+
+<header>
+
+    <div class="logo">
+
+        LEARN<span>MIRROR</span> AI
+
+    </div>
+
+
+    <p>
+        Don't just study. Prove you understand.
+    </p>
+
+</header>
+
+
+
+<!-- =====================================================
+     MAIN
+===================================================== -->
+
+<main>
+
+
+<!-- =====================================================
+     STUDENT PROFILE
+===================================================== -->
+
+<section class="card">
+
+    <h2>
+        👤 Student Profile
+    </h2>
+
+
+    <!-- COURSE -->
+
+    <input
+        type="text"
+        id="course"
+        placeholder="Course (Example: B.Tech AIML)"
+    >
+
+
+    <!-- SEMESTER -->
+
+    <input
+        type="text"
+        id="semester"
+        placeholder="Semester"
+    >
+
+
+
+    <!-- =================================================
+         SYLLABUS
+    ================================================= -->
+
+    <h3 class="section-title">
+
+        📚 Add Your Complete Syllabus
+
+    </h3>
+
+
+    <p class="small-text">
+
+        Type/Paste your syllabus OR upload a PDF syllabus.
+
+    </p>
+
+
+
+    <!-- =================================================
+         SYLLABUS TEXT
+    ================================================= -->
+
+    <textarea
+        id="syllabusText"
+        placeholder="Type or paste your complete syllabus here...
+
+Example:
+
+UNIT 1
+Introduction
+Basics
+Important Concepts
+
+UNIT 2
+Topic A
+Topic B
+
+UNIT 3
+Topic C
+Topic D"
+    ></textarea>
+
+
+
+    <!-- =================================================
+         OR
+    ================================================= -->
+
+    <div class="or-text">
+        OR
+    </div>
+
+
+
+    <!-- =================================================
+     PDF UPLOAD
+================================================= -->
+
+<div class="pdf-upload-section">
+
+    <!-- Hidden actual file input -->
+    <input
+        type="file"
+        id="syllabusFile"
+        name="syllabus"
+        accept=".pdf,application/pdf"
+        style="display:none;"
+        onchange="handlePDFSelection(this)"
+    >
+
+    <!-- CLICK TO SELECT PDF -->
+    <button
+        type="button"
+        id="choosePdfBtn"
+        class="upload-box"
+        onclick="document.getElementById('syllabusFile').click()"
+    >
+
+        <span class="upload-icon">
+            📄
+        </span>
+
+        <span class="upload-title">
+            Choose Syllabus PDF
+        </span>
+
+        <span
+            id="fileName"
+            class="file-name"
+        >
+            No PDF selected
+        </span>
+
+    </button>
+
+
+    <!-- UPLOAD BUTTON -->
+
+    <button
+        type="button"
+        id="uploadPdfBtn"
+        class="upload-pdf-btn"
+        onclick="uploadSyllabus()"
+    >
+
+        📤 Upload & Extract PDF
+
+    </button>
+
+
+    <!-- STATUS -->
+
+    <div
+        id="uploadStatus"
+        class="upload-status"
+    ></div>
+
+</div>
+    <!-- =================================================
+         EXAM DATE
+    ================================================= -->
+
+    <label class="input-label">
+
+        📅 Exam Date
+
+    </label>
+
+
+    <input
+        type="date"
+        id="examDate"
+    >
+
+
+
+    <!-- =================================================
+         DAILY STUDY TIME
+    ================================================= -->
+
+    <label class="input-label">
+
+        ⏰ Daily Study Time (Hours)
+
+    </label>
+
+
+    <input
+        type="number"
+        id="studyTime"
+        placeholder="Example: 4"
+        min="1"
+        max="24"
+    >
+
+
+
+    <!-- =================================================
+         GENERATE PLAN
+    ================================================= -->
+
+    <button
+        type="button"
+        class="generate-btn"
+        onclick="generatePlan()"
+    >
+
+        🚀 Generate Smart Learning Plan
+
+    </button>
+
+
+</section>
+
+
+
+<!-- =====================================================
+     PERSONALIZED LEARNING PLAN
+===================================================== -->
+
+<section class="card">
+
+    <h2>
+        📅 Personalized Learning Plan
+    </h2>
+
+
+    <div id="planSummary">
+
+        <p>
+            Your smart AI-generated study plan will appear here.
+        </p>
+
+    </div>
+
+
+    <div id="planOutput"></div>
+
+
+</section>
+
+
+
+<!-- =====================================================
+     LEARN
+===================================================== -->
+
+<section class="card">
+
+    <h2>
+        📚 Learn
+    </h2>
+
+
+    <div id="learnContent">
+
+        <h3>
+            No topic selected yet
+        </h3>
+
+
+        <p>
+
+            Generate your study plan and select a topic
+            to start learning.
+
+        </p>
+
+    </div>
+
+
+
+    <!-- LEARNING RESOURCES -->
+
+    <div id="learningResources"></div>
+
+
+
+    <!-- =================================================
+         AI TUTOR
+    ================================================= -->
+
+    <div id="aiTutor">
+
+        <h3>
+            🤖 AI Tutor
+        </h3>
+
+
+        <p class="small-text">
+
+            Ask questions about the selected topic.
+
+        </p>
+
+
+        <div id="tutorChat">
+
+            <div class="tutor-message tutor-ai">
+
+                👋 Hi! Select a topic and ask me anything
+                about it.
+
+            </div>
+
+        </div>
+
+
+        <div class="tutor-input-row">
+
+
+            <input
+                type="text"
+                id="tutorQuestion"
+                placeholder="Ask your doubt..."
+                onkeydown="
+                    if(event.key === 'Enter') {
+                        askAITutor();
+                    }
+                "
+            >
+
+
+            <button
+                type="button"
+                class="tutor-btn"
+                onclick="askAITutor()"
+            >
+
+                ➤ Ask
+
+            </button>
+
+
+        </div>
+
+    </div>
+
+
+</section>
+
+
+
+<!-- =====================================================
+     TEACH BACK
+===================================================== -->
+
+<section class="card">
+
+    <h2>
+        🎤 Teach Back
+    </h2>
+
+
+    <p>
+        Explain the selected topic in your own words.
+    </p>
+
+
+    <textarea
+        id="explanation"
+        placeholder="Explain the selected topic here in your own words..."
+    ></textarea>
+
+
+
+    <!-- VOICE -->
+
+    <div class="voice-buttons">
+
+
+        <button
+            type="button"
+            onclick="startVoiceRecognition()"
+            class="voice-btn"
+        >
+
+            🎙️ Start Speaking
+
+        </button>
+
+
+        <button
+            type="button"
+            onclick="stopVoiceRecognition()"
+            class="stop-btn"
+        >
+
+            ⏹️ Stop Speaking
+
+        </button>
+
+
+    </div>
+
+
+    <p id="voiceStatus"></p>
+
+
+
+    <!-- EVALUATE -->
+
+    <button
+        type="button"
+        class="evaluate-btn"
+        onclick="evaluateExplanation()"
+    >
+
+        🧠 Evaluate My Understanding
+
+    </button>
+
+
+</section>
+
+
+
+<!-- =====================================================
+     UNDERSTANDING REPORT
+===================================================== -->
+
+<section class="card report">
+
+    <h2>
+        📊 Understanding Report
+    </h2>
+
+
+    <div id="report">
+
+        <div class="report-placeholder">
+
+            <p>
+                Your understanding score will appear here.
+            </p>
+
+
+            <p>
+                Complete the Teach Back section to generate
+                your personalized report.
+            </p>
+
+        </div>
+
+    </div>
+
+
+</section>
+
+
+</main>
+
+
+
+<!-- =====================================================
+     FOOTER
+===================================================== -->
+
+<footer>
+
+    LearnMirror AI • Learn → Explain → Evaluate → Adapt
+
+</footer>
+
+
+
+<!-- =====================================================
+     JAVASCRIPT
+===================================================== -->
+
+<script
+    src="{{ url_for('static', filename='script.js') }}?v=3001"
+></script>
+
+
+</body>
+
+</html>
