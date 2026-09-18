@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 import json
@@ -13,7 +14,7 @@ from google import genai
 # =========================================================
 
 app = Flask(__name__)
-
+CORS(app)
 
 # =========================================================
 # CONFIGURATION
@@ -39,8 +40,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Primary model + lightweight fallbacks.
 # These are current stable Gemini API model IDs.
 GEMINI_MODELS = [
-    "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
     "gemini-2.5-flash",
 ]
 
@@ -725,7 +726,7 @@ Answer the student's question now.
         print("AI Engine :", "Gemini")
         print("Topic     :", topic)
         print("Question  :", question)
-        print("Model     :", GEMINI_MODEL)
+        print("AI Model  :", GEMINI_MODEL)
         print("========================================")
 
         # =====================================================
