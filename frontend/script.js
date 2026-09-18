@@ -17,7 +17,7 @@
    12. 80% next-topic unlock
    ========================================================= */
 
-const API_URL = "https://YOUR-RENDER-APP.onrender.com";
+const API_URL = "https://learnmirror-ai-3.onrender.com";
 /* =========================================================
    GLOBAL VARIABLES
 ========================================================= */
